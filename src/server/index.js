@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { isIP } from "node:net";
 import { Readable, Transform } from "node:stream";
@@ -11,6 +11,7 @@ import { config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
 import { enqueueAnalysis } from "./pipeline.js";
 import { headersForVideoUrl } from "./url-source.js";
+import { inspectVideo } from "./video.js";
 
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
@@ -99,18 +100,34 @@ async function streamToFile(readable, outputPath, maxBytes) {
   let bytes = 0;
   const counter = new Transform({ transform(chunk, encoding, callback) { bytes += chunk.length; if (bytes > maxBytes) return callback(new Error(`视频太大了，第一版最多支持 ${Math.round(maxBytes / 1024 / 1024)} MB。`)); callback(null, chunk); } });
   await pipeline(readable, counter, createWriteStream(outputPath));
+  return bytes;
 }
 
 async function downloadUrl(url, outputPath, job) {
-  const response = await fetch(url, { redirect: "follow", headers: headersForVideoUrl(url), signal: AbortSignal.timeout(60_000) });
-  if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，不是可直接下载的视频文件。");
-  const contentLength = Number(response.headers.get("content-length") || 0);
-  if (contentLength > config.maxUploadBytes) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
-  const stream = Readable.fromWeb(response.body);
-  await streamToFile(stream, outputPath, config.maxUploadBytes);
-  updateJob(job, { progress: { stage: "inspecting", percent: 12, detail: "视频已进入临时空间。" } });
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await rm(outputPath, { force: true });
+      const response = await fetch(url, { redirect: "follow", headers: { ...headersForVideoUrl(url), "accept-encoding": "identity" }, signal: AbortSignal.timeout(60_000) });
+      if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，不是可直接下载的视频文件。");
+      const contentLength = Number(response.headers.get("content-length") || 0);
+      if (contentLength > config.maxUploadBytes) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
+      const stream = Readable.fromWeb(response.body);
+      const bytes = await streamToFile(stream, outputPath, config.maxUploadBytes);
+      if (!bytes) throw new Error("视频下载结果为空。");
+      if (contentLength && bytes !== contentLength) throw new Error(`视频下载不完整（收到 ${bytes} / ${contentLength} 字节）。`);
+      await inspectVideo(outputPath);
+      updateJob(job, { progress: { stage: "inspecting", percent: 12, detail: "视频已进入临时空间。" } });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error.message.startsWith("视频太长") || error.message.includes("不是可直接下载的视频")) throw error;
+      if (attempt < 3) updateJob(job, { progress: { stage: "downloading", percent: 8, detail: `视频没有完整到达，正在重新取回（${attempt}/3）。` } });
+    }
+  }
+  throw new Error(`视频下载不完整，已自动重试 3 次。${lastError ? ` ${lastError.message}` : ""}`);
 }
 
 function validateVideoUrl(value) {
