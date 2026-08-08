@@ -1,4 +1,8 @@
+import "dotenv/config";
 import os from "node:os";
+
+const dashscopeApiKey = process.env.DASHSCOPE_API_KEY || "";
+const visionApiKey = process.env.VISION_API_KEY || dashscopeApiKey;
 
 const integerEnv = (name, fallback) => {
   const value = Number.parseInt(process.env[name] || "", 10);
@@ -13,9 +17,9 @@ export const config = {
   maxFrames: integerEnv("MAX_FRAMES", 12),
   resultTtlSeconds: integerEnv("RESULT_TTL_SECONDS", 20 * 60),
   tempRoot: process.env.TEMP_ROOT || os.tmpdir(),
-  asrProvider: process.env.ASR_PROVIDER || (process.env.DASHSCOPE_API_KEY ? "dashscope" : "mock"),
-  analysisProvider: process.env.ANALYSIS_PROVIDER || (process.env.VISION_API_KEY ? "openai-compatible" : "mock"),
-  dashscopeApiKey: process.env.DASHSCOPE_API_KEY || "",
+  asrProvider: process.env.ASR_PROVIDER || (dashscopeApiKey ? "dashscope" : "mock"),
+  analysisProvider: process.env.ANALYSIS_PROVIDER || (visionApiKey ? "openai-compatible" : "mock"),
+  dashscopeApiKey,
   dashscopeWorkspaceId: process.env.DASHSCOPE_WORKSPACE_ID || "",
   dashscopeModel: process.env.ASR_MODEL || "paraformer-v2",
   dashscopePollIntervalMs: integerEnv("DASHSCOPE_POLL_INTERVAL_MS", 2000),
@@ -25,11 +29,15 @@ export const config = {
   ossAccessKeyId: process.env.OSS_ACCESS_KEY_ID || "",
   ossAccessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || "",
   ossPrefix: process.env.OSS_PREFIX || "between-frames/temporary",
-  visionApiKey: process.env.VISION_API_KEY || "",
+  visionApiKey,
   visionBaseUrl: process.env.VISION_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1",
-  visionModel: process.env.VISION_MODEL || "qwen-vl-plus"
+  visionModel: process.env.VISION_MODEL || "qwen3-vl-flash"
 };
 
 export function asrIsConfigured() {
-  return config.asrProvider === "mock" || Boolean(config.dashscopeApiKey && config.ossBucket && config.ossAccessKeyId && config.ossAccessKeySecret);
+  return config.asrProvider === "dashscope" && Boolean(config.dashscopeApiKey && config.ossBucket && config.ossAccessKeyId && config.ossAccessKeySecret);
+}
+
+export function analysisIsConfigured() {
+  return config.analysisProvider === "openai-compatible" && Boolean(config.visionApiKey);
 }

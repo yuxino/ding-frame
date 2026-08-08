@@ -8,7 +8,7 @@
 - 抖音播放直链兼容：自动跟随 CDN 跳转并补齐浏览器请求头
 - FFmpeg 抽帧与音频整理
 - ASR 适配器：默认演示数据，可切换阿里云百炼 Paraformer
-- 画面分析适配器：默认本地整理，可切换兼容 OpenAI Chat Completions 的视觉模型
+- 画面分析适配器：默认本地整理，可切换阿里云百炼兼容 OpenAI Chat Completions 的视觉模型
 - 结果页：关键画面、时间线、听写片段和几个值得回看的瞬间
 - 原视频和中间音频在分析完成后立即清除；结果和抽帧默认 20 分钟后清除
 - 单进程内存任务表，适合小视频 MVP；后续若多人并发再换队列/数据库
@@ -31,9 +31,20 @@ npm start
 
 ## 接入真实模型
 
-复制 `.env.example` 为 `.env`。ASR 使用 `ASR_PROVIDER=dashscope` 时，需要配置 DashScope API Key、OSS 临时桶和 RAM 访问凭证；服务会把中间 WAV 上传到 OSS，拿到签名 URL 后调用 Paraformer，并在任务结束后删除该对象。
+复制 `.env.example` 为 `.env`。服务会自动加载 `.env`，但不要把真实 key 提交到 GitHub。
 
-画面分析可通过 `ANALYSIS_PROVIDER=openai-compatible` 接入兼容 Chat Completions 的视觉模型。没有这些配置时，mock 适配器仍会让抽帧、任务状态和结果页面可验证。
+接入阿里云百炼时，至少设置：
+
+```env
+ASR_PROVIDER=dashscope
+ANALYSIS_PROVIDER=openai-compatible
+DASHSCOPE_API_KEY=你的百炼通用APIKey
+VISION_MODEL=qwen3-vl-flash
+```
+
+ASR 还需要配置北京 OSS 临时桶和 RAM 访问凭证；服务会把中间 WAV 上传到 OSS，拿到签名 URL 后调用 Paraformer，并在任务结束后删除该对象。`VISION_API_KEY` 留空时会自动复用 `DASHSCOPE_API_KEY`。
+
+画面分析默认使用 `qwen3-vl-flash`。没有这些配置时，mock 适配器仍会让抽帧、任务状态和结果页面可验证；此时页面里的听写和总结只是演示数据，不代表真实视频内容。
 
 ## CI 与阿里云
 

@@ -7,7 +7,7 @@ import { pipeline } from "node:stream/promises";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { config } from "./config.js";
+import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
 import { enqueueAnalysis } from "./pipeline.js";
 import { headersForVideoUrl } from "./url-source.js";
@@ -16,7 +16,7 @@ import { inspectVideo } from "./video.js";
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
 
-app.get("/api/health", async () => ({ ok: true, service: "between-frames", asrProvider: config.asrProvider, analysisProvider: config.analysisProvider }));
+app.get("/api/health", async () => ({ ok: true, service: "between-frames", asrProvider: config.asrProvider, analysisProvider: config.analysisProvider, configured: { asr: asrIsConfigured(), analysis: analysisIsConfigured() }, mock: { asr: config.asrProvider === "mock", analysis: config.analysisProvider === "mock" } }));
 
 app.post("/api/analyze/upload", async (request, reply) => {
   let job;
