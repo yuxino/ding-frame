@@ -10,6 +10,7 @@ import fastifyStatic from "@fastify/static";
 import { config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
 import { enqueueAnalysis } from "./pipeline.js";
+import { headersForVideoUrl } from "./url-source.js";
 
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
@@ -101,8 +102,10 @@ async function streamToFile(readable, outputPath, maxBytes) {
 }
 
 async function downloadUrl(url, outputPath, job) {
-  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(60_000) });
+  const response = await fetch(url, { redirect: "follow", headers: headersForVideoUrl(url), signal: AbortSignal.timeout(60_000) });
   if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，不是可直接下载的视频文件。");
   const contentLength = Number(response.headers.get("content-length") || 0);
   if (contentLength > config.maxUploadBytes) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
   const stream = Readable.fromWeb(response.body);
