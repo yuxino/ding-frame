@@ -7,7 +7,7 @@ const jobs = new Map();
 
 export async function createJob({ source, title }) {
   const id = randomUUID();
-  const dir = join(config.tempRoot, `between-frames-${id}`);
+  const dir = join(config.tempRoot, `ding-frame-${id}`);
   await mkdir(dir, { recursive: true });
   const now = Date.now();
   const job = {

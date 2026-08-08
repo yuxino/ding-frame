@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { spawn } from "node:child_process";
@@ -20,7 +20,8 @@ export async function inspectVideo(inputPath) {
   return {
     durationMs: Math.round(durationSeconds * 1000),
     width: parsed.streams?.find((stream) => stream.codec_type === "video")?.width || null,
-    height: parsed.streams?.find((stream) => stream.codec_type === "video")?.height || null
+    height: parsed.streams?.find((stream) => stream.codec_type === "video")?.height || null,
+    hasAudio: parsed.streams?.some((stream) => stream.codec_type === "audio") || false
   };
 }
 
@@ -31,11 +32,31 @@ export async function extractFrames(inputPath, outputDir) {
   return names.map((filename, index) => ({ filename: basename(filename), atMs: index * config.frameIntervalSeconds * 1000 }));
 }
 
-export async function extractAudio(inputPath, outputPath) {
-  await runCommand(ffmpegBin, ["-hide_banner", "-loglevel", "error", "-y", "-i", inputPath, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", outputPath]);
-  const audio = await stat(outputPath);
-  if (!audio.size) throw new Error("视频里没有可识别的声音。");
-  return outputPath;
+export async function extractAudioSegments(inputPath, outputDir, durationMs) {
+  await rm(outputDir, { recursive: true, force: true });
+  await mkdir(outputDir, { recursive: true });
+  await runCommand(ffmpegBin, [
+    "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
+    "-vn", "-map", "0:a:0", "-ac", "1", "-ar", "16000",
+    "-c:a", "libmp3lame", "-b:a", "64k",
+    "-f", "segment", "-segment_time", String(config.asrSegmentSeconds),
+    "-reset_timestamps", "1", join(outputDir, "segment-%03d.mp3")
+  ]);
+  const names = (await readdir(outputDir)).filter((name) => name.endsWith(".mp3")).sort();
+  return createAudioSegmentMetadata(names, durationMs, config.asrSegmentSeconds)
+    .map((segment) => ({ ...segment, path: join(outputDir, segment.filename) }));
+}
+
+export function createAudioSegmentMetadata(names, durationMs, segmentSeconds) {
+  const segmentMs = segmentSeconds * 1000;
+  return names.map((filename, index) => {
+    const startMs = index * segmentMs;
+    return {
+      filename,
+      startMs,
+      endMs: Math.min(durationMs, startMs + segmentMs)
+    };
+  });
 }
 
 export async function runCommand(command, args) {

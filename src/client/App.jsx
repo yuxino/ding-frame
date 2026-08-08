@@ -238,7 +238,7 @@ function ResultView({ job, onClear }) {
 }
 
 function InfoModal({ onClose }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><span className="panel-kicker">帧间 · 小说明</span><h2 id="info-title">让视频停在临时空间里。</h2><p>本地视频会在上传期间传到服务端临时目录，视频地址会被服务端短暂取回。分析结束后，原视频、抽出的音频会立即删除；抽帧和文本结果只保留一小会儿。</p><p className="modal-muted">没有配置模型密钥时，项目会用演示数据跑完整流程。配置 Paraformer 后，听写会替换为真实 ASR；配置兼容 OpenAI 的视觉模型后，可以进一步理解画面。</p><button className="primary-button" type="button" onClick={onClose}>知道了 <span>→</span></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><span className="panel-kicker">盯帧 · 小说明</span><h2 id="info-title">让视频停在临时空间里。</h2><p>本地视频会在上传期间传到服务端临时目录，视频地址会被服务端短暂取回。分析结束后，原视频、抽出的音频会立即删除；抽帧和文本结果只保留一小会儿。</p><p className="modal-muted">没有配置模型密钥时，项目会用演示数据跑完整流程。配置百炼通用 API Key 后，千问 ASR 与视觉模型会直接理解声音和画面，全程不需要 Bucket。</p><button className="primary-button" type="button" onClick={onClose}>知道了 <span>→</span></button></div></div>;
 }
 
 export default App;

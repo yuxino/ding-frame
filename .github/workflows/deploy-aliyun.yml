@@ -24,14 +24,14 @@ jobs:
           password: ${{ secrets.ACR_PASSWORD }}
       - name: Build and push image
         env:
-          IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/between-frames:${{ github.sha }}
+          IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/ding-frame:${{ github.sha }}
         run: |
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
       - name: Replace ECS container
         uses: appleboy/ssh-action@v1.2.2
         env:
-          IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/between-frames:${{ github.sha }}
+          IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/ding-frame:${{ github.sha }}
           ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
@@ -43,5 +43,5 @@ jobs:
           script: |
             printf '%s' "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" --username "$ACR_USERNAME" --password-stdin
             docker pull "$IMAGE"
-            docker rm -f between-frames || true
-            docker run -d --name between-frames --restart unless-stopped --env-file /etc/between-frames/.env -p 3000:3000 "$IMAGE"
+            docker rm -f ding-frame || true
+            docker run -d --name ding-frame --restart unless-stopped --env-file /etc/ding-frame/.env -p 3000:3000 "$IMAGE"

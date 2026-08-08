@@ -1,4 +1,4 @@
-# 帧间视频分析设计
+# 盯帧视频分析设计
 
 ## 目标
 
@@ -16,7 +16,7 @@ flowchart LR
   A --> T[临时任务目录]
   T --> F[FFmpeg：抽帧与音频整理]
   F --> S[ASR 适配器]
-  S --> P[Paraformer 或演示 ASR]
+  S --> P[Qwen3-ASR-Flash 或演示 ASR]
   F --> V[画面分析适配器]
   V --> Q[兼容 OpenAI 的视觉模型或演示分析]
   P --> R[内存结果 + 临时抽帧]
@@ -25,14 +25,14 @@ flowchart LR
   R --> X[TTL 到期：删除任务目录]
 ```
 
-第一版使用单 Node.js 进程、内存任务表和一个 Docker 容器。上传/下载会流入服务端临时目录；结果页只通过带随机任务 ID 的接口读取抽帧。真实 ASR 通过 OSS 签名 URL 让 Paraformer读取音频，并在调用完成后删除 OSS 对象。
+第一版使用单 Node.js 进程、内存任务表和一个 Docker 容器。上传/下载会流入服务端临时目录；结果页只通过带随机任务 ID 的接口读取抽帧。真实 ASR 将一分钟以内的 MP3 切片编码为 Base64，直接调用 Qwen3-ASR-Flash，不引入 Bucket。
 
 ## 关键决策
 
 1. **Node.js + Fastify**：前后端可以同容器运行，Fastify 对流式请求和小型 API 足够轻。
 2. **React + Vite**：承载有状态的上传、进度轮询和时间线，仍保持单页原型的轻量感。
 3. **FFmpeg**：抽帧和音频标准化都由同一个工具负责，避免在 Node 中维护媒体编解码逻辑。
-4. **适配器而不是锁死模型**：无密钥时 mock，配置百炼后使用 Paraformer；画面理解使用兼容 OpenAI Chat Completions 的接口，便于切换模型。
+4. **适配器而不是锁死模型**：无密钥时 mock，配置百炼后使用 Qwen3-ASR-Flash；画面理解使用兼容 OpenAI Chat Completions 的接口，便于切换模型。
 5. **不引入数据库/队列**：小视频 MVP 先接受单实例和重启丢任务，避免过早建平台基础设施。
 
 ## 错误与边界

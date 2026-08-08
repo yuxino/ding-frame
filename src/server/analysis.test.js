@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { config } from "./config.js";
-import { analyze } from "./analysis.js";
+import { analyze, normalizeVisionModelResult } from "./analysis.js";
 
 describe("local analysis", () => {
   it("keeps transcript and frames aligned in a readable result", async () => {
@@ -20,5 +20,34 @@ describe("local analysis", () => {
   it("defaults to the mock provider when no model is configured", () => {
     expect(config.asrProvider).toBe("mock");
     expect(config.analysisProvider).toBe("mock");
+  });
+});
+
+describe("vision model result", () => {
+  it("accepts fenced JSON and normalizes title, highlights, and frame captions", () => {
+    const result = normalizeVisionModelResult({
+      raw: `\`\`\`json
+        {"title":"雪豹","summary":"丁真在自然场景中讲述雪豹。","highlights":[{"atMs":"9000","title":"雪豹出现","detail":"画面和人声在这里交汇。"}],"frameCaptions":[{"index":0,"caption":"山野中的人物"}]}
+      \`\`\``,
+      fallbackTitle: "input.mp4",
+      durationMs: 8000,
+      frames: [{ filename: "frame-001.jpg", atMs: 0 }],
+      transcript: [{ startMs: 0, endMs: 8000, text: "雪豹" }]
+    });
+
+    expect(result.title).toBe("雪豹");
+    expect(result.summary).toContain("丁真");
+    expect(result.highlights[0].atMs).toBe(8000);
+    expect(result.frames[0].caption).toBe("山野中的人物");
+  });
+
+  it("rejects a successful response that contains no JSON object", () => {
+    expect(() => normalizeVisionModelResult({
+      raw: "我看完了，但没有按格式返回。",
+      fallbackTitle: "测试视频",
+      durationMs: 1000,
+      frames: [],
+      transcript: []
+    })).toThrow("有效 JSON");
   });
 });

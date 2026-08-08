@@ -6,7 +6,7 @@
 
 **Architecture:** A Fastify API streams inputs into an OS temp directory, runs FFmpeg, calls pluggable mock/Alibaba ASR and vision adapters, stores only in-memory job metadata plus temporary frames, and serves a React/Vite frontend from the same container.
 
-**Tech Stack:** Node.js 22, Fastify 5, React 19, Vite 7, FFmpeg, Aliyun OSS + Paraformer adapter, GitHub Actions, Docker, Aliyun ECS/ACR.
+**Tech Stack:** Node.js 22, Fastify 5, React 19, Vite 7, FFmpeg, Qwen3-ASR-Flash + Qwen3-VL-Flash, GitHub Actions, Docker, Aliyun ECS/ACR.
 
 ---
 
@@ -45,7 +45,7 @@
 
 **Step 1:** Keep mock providers as the zero-configuration path.
 
-**Step 2:** Add the Paraformer async submission/polling flow, temporary OSS upload, signed URL, and post-task object deletion.
+**Step 2:** Add Qwen3-ASR-Flash calls with short MP3 segments sent as Base64 data URIs and immediate local cleanup.
 
 **Step 3:** Add the optional OpenAI-compatible vision call, sending a small capped set of frames and transcript context.
 
@@ -62,4 +62,4 @@
 
 **Step 2:** Run the container with the mock configuration and call `/api/health`.
 
-**Step 3:** Configure GitHub secrets and the ECS `/etc/between-frames/.env` file when the repository and server details are available.
+**Step 3:** Configure GitHub secrets and the ECS `/etc/ding-frame/.env` file when the repository and server details are available.
