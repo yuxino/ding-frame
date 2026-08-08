@@ -109,9 +109,9 @@ function App() {
       <aside className="rail" aria-label="主导航">
         <div>
           <div className="brand-lockup">
-            <span className="brand-mark" aria-hidden="true">帧</span>
+            <span className="brand-mark" aria-hidden="true">盯</span>
             <div>
-              <div className="brand-name">帧间</div>
+              <div className="brand-name">盯帧</div>
               <div className="brand-tagline">看见，再理解</div>
             </div>
           </div>
@@ -126,7 +126,7 @@ function App() {
         </div>
         <div className="rail-bottom">
           <div className="streak-note"><span className="pulse-dot" /><span>结果会自行消失</span></div>
-          <button className="avatar-button" type="button" aria-label="关于帧间" onClick={() => setShowSettings(true)}>G</button>
+          <button className="avatar-button" type="button" aria-label="关于盯帧" onClick={() => setShowSettings(true)}>G</button>
         </div>
       </aside>
 
