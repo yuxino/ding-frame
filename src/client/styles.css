@@ -139,12 +139,20 @@ h1 em { color: var(--moss-deep); font-style: normal; }
 .panel-heading { align-items: flex-start; padding: 43px 38px 30px; border-bottom: 1px solid var(--line); }
 .panel-heading h2 { margin: 10px 0 0; color: var(--ink); font-family: var(--serif); font-size: 25px; font-weight: 400; }
 .live-dot { width: 6px; height: 6px; margin-top: 5px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 0 4px rgba(83,100,84,.1); }
-.transcript-list { flex: 1; overflow: auto; padding: 21px 22px; }
-.transcript-line { display: grid; grid-template-columns: 64px 1fr; gap: 15px; width: 100%; margin-bottom: 13px; padding: 19px 17px; border: 1px solid var(--line); border-radius: 13px; color: var(--ink-soft); background: rgba(251,250,246,.42); text-align: left; box-shadow: 0 9px 24px rgba(48,45,35,.025); transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease; }
-.transcript-line:hover, .transcript-line.active { color: var(--moss-deep); border-color: rgba(83,100,84,.27); background: rgba(244,247,239,.82); transform: translateY(-1px); }
-.transcript-line.active { border-left-color: var(--rust); box-shadow: inset 2px 0 var(--rust), 0 11px 26px rgba(48,45,35,.035); }
-.transcript-line > span { color: var(--rust); font-size: 9px; padding-top: 4px; white-space: nowrap; }
-.transcript-line p { margin: 0; font-family: var(--serif); font-size: 15px; line-height: 1.78; }
+.transcript-list { flex: 1; overflow: auto; padding: 12px 25px 24px; }
+.transcript-minute { position: relative; display: grid; grid-template-columns: 72px 1fr; gap: 18px; width: 100%; padding: 25px 0 26px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); background: transparent; text-align: left; transition: color 160ms ease, background 160ms ease; }
+.transcript-minute::before { content: ""; position: absolute; top: 0; bottom: 0; left: -25px; width: 2px; background: transparent; transition: background 160ms ease; }
+.transcript-minute:hover, .transcript-minute.active { color: var(--moss-deep); background: linear-gradient(90deg, rgba(228,233,223,.42), transparent 78%); }
+.transcript-minute:hover::before, .transcript-minute.active::before { background: var(--rust); }
+.minute-rail { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.minute-rail strong { color: var(--rust); font-family: var(--serif); font-size: 27px; font-weight: 400; letter-spacing: -.04em; line-height: 1; }
+.minute-rail i { color: var(--ink-faint); font-size: 8px; font-style: normal; letter-spacing: .03em; white-space: nowrap; }
+.minute-subtitle { display: block; min-width: 0; }
+.minute-subtitle small { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; color: var(--moss); font-size: 9px; letter-spacing: .08em; }
+.minute-subtitle small b { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.minute-subtitle p { margin: 0; font-family: var(--serif); font-size: 15px; line-height: 1.78; }
+.minute-subtitle em { display: block; margin-top: 13px; color: var(--ink-faint); font-size: 8px; font-style: normal; letter-spacing: .04em; opacity: 0; transition: opacity 160ms ease; }
+.transcript-minute:hover .minute-subtitle em, .transcript-minute.active .minute-subtitle em { opacity: 1; }
 .transcript-empty { padding: 38px 12px; color: var(--ink-faint); font-family: var(--serif); font-size: 14px; line-height: 1.7; text-align: center; }
 .panel-note { padding: 20px 25px 24px; color: var(--ink-faint); font-size: 9px; line-height: 1.7; text-align: center; }
 .modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(52,71,58,.18); backdrop-filter: blur(4px); }

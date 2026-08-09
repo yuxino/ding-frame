@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { groupTranscriptByMinute } from "./transcript.js";
 
 const stageLabels = {
   queued: "排队中",
@@ -221,7 +222,8 @@ function ResultView({ job, onClear }) {
 
   const selected = result.frames[selectedFrame] || result.frames[0];
   const countdown = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
-  const activeTranscript = useMemo(() => result.transcript.findIndex((line) => currentMs >= line.startMs && currentMs < line.endMs), [currentMs, result.transcript]);
+  const transcriptMinutes = useMemo(() => groupTranscriptByMinute(result.transcript, result.durationMs), [result.durationMs, result.transcript]);
+  const activeMinute = Math.floor(currentMs / 60000);
 
   function syncToTime(atMs, shouldPlay = true) {
     const targetMs = Math.min(result.durationMs || atMs, Math.max(0, Number(atMs) || 0));
@@ -248,7 +250,7 @@ function ResultView({ job, onClear }) {
     <section className="result-layout">
       <div className="result-main">
         <div className="result-heading"><div><div className="eyebrow">分析完成 · {formatDate(job.createdAt)}</div><h1>{result.title || "这段视频，留下了什么？"}</h1><div className="summary-block"><span>AI 视频总结</span><p className="result-deck">{result.summary}</p></div></div><button className="quiet-button danger" type="button" onClick={onClear}>立即清除</button></div>
-        <div className="stat-row"><div><span>视频时长</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>抽取画面</span><strong>{result.frames.length} 帧</strong></div><div><span>听写片段</span><strong>{result.transcript.length} 段</strong></div><div className="expiry-stat"><span>自动消失</span><strong>{countdown}</strong></div></div>
+        <div className="stat-row"><div><span>视频时长</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>抽取画面</span><strong>{result.frames.length} 帧</strong></div><div><span>字幕分钟</span><strong>{transcriptMinutes.length} 格</strong></div><div className="expiry-stat"><span>自动消失</span><strong>{countdown}</strong></div></div>
         <div className="tag-panel">
           <div className="tag-panel-copy"><span className="section-kicker">内容标记</span><p>主体、场景、动作和气氛；点标签就去它第一次出现的地方。</p></div>
           <div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div>
@@ -260,7 +262,19 @@ function ResultView({ job, onClear }) {
         <div className="frame-strip" aria-label="关键帧时间线">{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`跳到 ${formatTime(frame.atMs)}：${frame.caption || "关键帧"}`} className={index === selectedFrame ? "active" : ""} onClick={() => syncToTime(frame.atMs)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
         <div className="highlights"><div className="section-kicker">值得回看的几个瞬间</div>{result.highlights.map((highlight) => <button type="button" className="highlight" key={`${highlight.atMs}-${highlight.title}`} onClick={() => syncToTime(highlight.atMs)}><div className="highlight-time"><span>▶</span>{formatTime(highlight.atMs)}</div><div><h3>{highlight.title}</h3><p>{highlight.detail}</p></div></button>)}</div>
       </div>
-      <aside className="transcript-panel"><div className="panel-heading"><div><span className="panel-kicker">ASR 时间轴</span><h2>点一句，回到当时</h2></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => <button type="button" className={`transcript-line ${index === activeTranscript ? "active" : ""}`} aria-pressed={index === activeTranscript} key={`${line.startMs}-${line.text}`} onClick={() => syncToTime(line.startMs)}><span>▶ {formatTime(line.startMs)}</span><p>{line.text}</p></button>) : <div className="transcript-empty">这段视频没有识别到可用人声。</div>}</div><div className="panel-note"><span className="tiny-star">✦</span>视频、抽帧和结果还会停留 {Math.ceil(remaining / 60000)} 分钟<br />到时一起离开。</div></aside>
+      <aside className="transcript-panel">
+        <div className="panel-heading"><div><span className="panel-kicker">分钟字幕</span><h2>一分一格，点时回看</h2></div><span className="live-dot" /></div>
+        <div className="transcript-list">
+          {transcriptMinutes.length ? transcriptMinutes.map((group) => {
+            const active = group.minute === activeMinute;
+            return <button type="button" className={`transcript-minute ${active ? "active" : ""}`} aria-pressed={active} key={group.minute} onClick={() => syncToTime(group.startMs)}>
+              <span className="minute-rail"><strong>{String(group.minute + 1).padStart(2, "0")}′</strong><i>{formatTime(group.startMs)}—{formatTime(group.endMs)}</i></span>
+              <span className="minute-subtitle"><small><b />{group.speakerLabel}</small><p>{group.text}</p><em>▶ 从 {formatTime(group.startMs)} 播放</em></span>
+            </button>;
+          }) : <div className="transcript-empty">这段视频没有识别到可用人声。</div>}
+        </div>
+        <div className="panel-note"><span className="tiny-star">✦</span>视频、抽帧和结果还会停留 {Math.ceil(remaining / 60000)} 分钟<br />到时一起离开。</div>
+      </aside>
     </section>
   );
 }
