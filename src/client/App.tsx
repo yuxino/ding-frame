@@ -123,6 +123,7 @@ function App() {
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   const hasResult = job?.status === "done" && job.result;
   const progress = job?.progress?.percent ?? 0;
@@ -184,6 +185,12 @@ function App() {
     setUrl("");
   }
 
+  async function restartAnalysis() {
+    await purgeJob();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.setTimeout(() => urlInputRef.current?.focus(), 250);
+  }
+
   function selectFile(nextFile: File | undefined) {
     if (!nextFile) return;
     setFile(nextFile);
@@ -243,7 +250,7 @@ function App() {
               ) : (
                 <label className="url-field">
                   <span><Glyph name="link" size={16} />公开的视频地址</span>
-                  <input type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://v.douyin.com/… 或视频直链" />
+                  <input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://v.douyin.com/… 或视频直链" />
                   <small>支持抖音分享链接、整段分享文案、B站/YouTube 等公开链接与视频直链</small>
                 </label>
               )}
@@ -257,7 +264,7 @@ function App() {
         )}
 
         {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={purgeJob} />}
-        {hasResult && <ResultView job={job} onClear={purgeJob} />}
+        {hasResult && <ResultView job={job} onClear={purgeJob} onRestart={restartAnalysis} />}
       </main>
 
       {showSettings && <InfoModal onClose={() => setShowSettings(false)} />}
@@ -308,7 +315,7 @@ function FitTitle({ children }: { children: ReactNode }) {
   return <h1 ref={ref}>{children}</h1>;
 }
 
-function ResultView({ job, onClear }: { job: Job; onClear: () => void }) {
+function ResultView({ job, onClear, onRestart }: { job: Job; onClear: () => void; onRestart: () => void }) {
   const result = job.result as AnalysisResult;
   const [remaining, setRemaining] = useState(Math.max(0, job.expiresAt - Date.now()));
   const [selectedFrame, setSelectedFrame] = useState(0);
@@ -361,7 +368,10 @@ function ResultView({ job, onClear }: { job: Job; onClear: () => void }) {
       <div className="result-main">
         <div className="result-heading">
           <div className="result-title"><span className="page-label">分析完成 · {formatDate(job.createdAt)}</span><FitTitle>{result.title || "这段视频，留下了什么？"}</FitTitle></div>
-          <button className="clear-button" type="button" onClick={onClear}><Glyph name="trash" size={16} />清除本次</button>
+          <div className="result-actions">
+            <button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />重新开始</button>
+            <button className="clear-button" type="button" onClick={onClear}><Glyph name="trash" size={16} />清除本次</button>
+          </div>
         </div>
 
         <div className="summary-block"><span><Glyph name="spark" size={15} />AI 视频总结</span><p>{result.summary}</p></div>
