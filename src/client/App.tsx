@@ -214,11 +214,11 @@ function App() {
           <section className="landing-layout">
             <div className="hero-copy">
               <div className="hero-badge"><span />小视频分析，不留库存</div>
-              <h1>一眼盯帧，<br />鉴定为：<br /><span className="slogan-verdict">纯纯的好活。</span></h1>
+              <h1>把一段小视频，<br />拆成几处<br /><span className="slogan-verdict">值得记住的瞬间。</span></h1>
               <p>放进一段小视频。盯帧会抽出关键画面、听写人声、标出重点，再给你一份能直接回看的总结。</p>
               <div className="feature-row">
                 <div><Glyph name="frame" /><span><strong>抽关键帧</strong><small>看清发生了什么</small></span></div>
-                <div><Glyph name="voice" /><span><strong>分钟字幕</strong><small>听清说了什么</small></span></div>
+                <div><Glyph name="voice" /><span><strong>逐句字幕</strong><small>听清说了什么</small></span></div>
                 <div><Glyph name="clock" /><span><strong>阅后即焚</strong><small>不占长期空间</small></span></div>
               </div>
             </div>
@@ -277,7 +277,7 @@ function ProgressView({ job, progress, error, onClear }: { job: Job; progress: n
     <section className="progress-layout">
       <div className="progress-copy">
         <span className="page-label">ANALYZING · {job.source === "url" ? "REMOTE VIDEO" : "LOCAL VIDEO"}</span>
-        <h1>正在把视频<br />盯明白。</h1>
+        <h1>正在把视频<br />整理成结果。</h1>
         <p>声音、画面和时间线正在临时空间里汇合。完成后会自动整理成可以点着回看的结果。</p>
       </div>
       <div className="progress-card">
