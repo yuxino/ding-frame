@@ -105,7 +105,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .result-main { min-width: 0; }
 .result-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 24px; }
 .result-title { min-width: 0; }
-.result-heading h1 { max-width: 850px; margin-top: 13px; overflow-wrap: anywhere; font-size: clamp(43px, 5.2vw, 74px); }
+.result-heading h1 { max-width: 850px; margin-top: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(43px, 5.2vw, 74px); }
 .clear-button { flex: 0 0 auto; min-width: max-content; min-height: 40px; padding: 0 13px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); font-size: 10px; font-weight: 620; box-shadow: 0 1px 2px rgba(16,17,15,.03); }
 .clear-button:hover { border-color: #dfb2aa; color: var(--danger); background: #fff8f6; }
 .summary-block { display: grid; grid-template-columns: 145px 1fr; gap: 24px; margin-bottom: 22px; padding: 24px; border-radius: 20px; color: white; background: var(--ink); }

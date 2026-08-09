@@ -225,6 +225,28 @@ function ProgressView({ job, progress, error, onClear }) {
   );
 }
 
+function FitTitle({ children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const fit = () => {
+      const base = Number.parseFloat(getComputedStyle(element).fontSize) || 43;
+      element.style.fontSize = "";
+      let size = base;
+      const minimum = 24;
+      while (size > minimum && element.scrollWidth > element.clientWidth) {
+        size -= 1;
+        element.style.fontSize = `${size}px`;
+      }
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [children]);
+  return <h1 ref={ref}>{children}</h1>;
+}
+
 function ResultView({ job, onClear }) {
   const [remaining, setRemaining] = useState(Math.max(0, job.expiresAt - Date.now()));
   const result = job.result;
@@ -266,7 +288,7 @@ function ResultView({ job, onClear }) {
     <section className="result-layout">
       <div className="result-main">
         <div className="result-heading">
-          <div className="result-title"><span className="page-label">分析完成 · {formatDate(job.createdAt)}</span><h1>{result.title || "这段视频，留下了什么？"}</h1></div>
+          <div className="result-title"><span className="page-label">分析完成 · {formatDate(job.createdAt)}</span><FitTitle>{result.title || "这段视频，留下了什么？"}</FitTitle></div>
           <button className="clear-button" type="button" onClick={onClear}><Glyph name="trash" size={16} />清除本次</button>
         </div>
 
