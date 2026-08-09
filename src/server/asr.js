@@ -151,7 +151,10 @@ export async function requestSegmentSubtitle({
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(body.output?.message || body.message || body.code || `听写模型请求失败：${response.status}`);
+    const message = body.output?.message || body.message || body.code || `听写模型请求失败：${response.status}`;
+    // 这一整段没有可识别的人声（纯音乐/静音等），跳过而不是中断整个任务
+    if (/ASR_RESPONSE_HAVE_NO_WORDS/.test(String(message))) return [];
+    throw new Error(message);
   }
   const sentence = body.output?.output?.sentence || body.output?.sentence;
   const words = Array.isArray(sentence?.words) ? sentence.words : [];

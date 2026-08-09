@@ -91,11 +91,11 @@ export async function resolveDouyinVideo(value, options = {}) {
     if (!response.ok) throw new Error(`抖音页面无法访问：${response.status}`);
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("video/") || contentType.includes("audio/")) {
-      return { url: current, source: "douyin", title: undefined };
+      return { url: current, source: "douyin", title: undefined, referer: "https://www.douyin.com/" };
     }
     const html = await response.text();
     const parsed = parseDouyinPage(html);
-    if (parsed) return { ...parsed, source: "douyin" };
+    if (parsed) return { ...parsed, source: "douyin", referer: "https://www.douyin.com/" };
     throw new Error("抖音这条内容没有解析到视频（可能是图文笔记、已删除或需要登录）。");
   }
   throw new Error("抖音链接重定向次数太多，暂时解析不了。");
@@ -167,7 +167,7 @@ export async function resolveBilibiliVideo(value, options = {}) {
   const direct = playBody.data?.durl?.[0]?.url;
   if (!direct) throw new Error("B 站没有返回可下载的播放地址（可能需要登录）。");
 
-  return { url: direct, title: typeof data.title === "string" ? data.title : undefined, source: "bilibili" };
+  return { url: direct, title: typeof data.title === "string" ? data.title : undefined, source: "bilibili", referer: "https://www.bilibili.com/" };
 }
 
 // 统一入口：能解析出真实可下载地址就返回它，否则原样返回让下载流程兜底。

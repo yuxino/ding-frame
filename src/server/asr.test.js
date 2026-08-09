@@ -184,3 +184,29 @@ describe("diarization result parsing", () => {
     }, { apiKey: "k", timeoutMs: 1000 })).rejects.toThrow("音频无法下载");
   });
 });
+
+describe("no-speech segments", () => {
+  it("skips a segment the ASR rejects as having no words", async () => {
+    const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const os = await import("node:os");
+    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-asr-nospeech-"));
+    try {
+      const path = join(dir, "segment-006.mp3");
+      await writeFile(path, "audio");
+      const lines = await requestSegmentSubtitle({
+        segment: { path, startMs: 360_000, endMs: 420_000 },
+        apiKey: "test-key",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model: "fun-asr-flash-2026-06-15",
+        fetchImpl: async () => new Response(JSON.stringify({ code: "ASR_RESPONSE_HAVE_NO_WORDS" }), {
+          status: 400,
+          headers: { "content-type": "application/json" }
+        })
+      });
+      expect(lines).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

@@ -53,7 +53,7 @@ app.post("/api/analyze/url", async (request, reply) => {
     if (resolved.title) updateJob(job, { title: resolved.title });
     const inputPath = join(job.dir, "input.mp4");
     job.inputPath = inputPath;
-    const download = await downloadUrl(resolved.url, inputPath, job);
+    const download = await downloadUrl(resolved.url, inputPath, job, { referer: resolved.referer });
     job.inputMimeType = download.contentType;
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
@@ -157,12 +157,12 @@ async function streamToFile(readable, outputPath, maxBytes) {
   return bytes;
 }
 
-async function downloadUrl(url, outputPath, job) {
+async function downloadUrl(url, outputPath, job, { referer } = {}) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       await rm(outputPath, { force: true });
-      const response = await fetch(url, { redirect: "follow", headers: { ...headersForVideoUrl(url), "accept-encoding": "identity" }, signal: AbortSignal.timeout(60_000) });
+      const response = await fetch(url, { redirect: "follow", headers: { ...headersForVideoUrl(url), ...(referer ? { referer } : {}), "accept-encoding": "identity" }, signal: AbortSignal.timeout(60_000) });
       if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
       const contentType = response.headers.get("content-type") || "";
       if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，没有解析出可下载的视频文件。抖音分享链接可能被风控或是图文笔记，也可以换成视频直链试试。");
