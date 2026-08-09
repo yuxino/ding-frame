@@ -3,8 +3,7 @@ const browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleW
 const DOUYIN_HOST_SUFFIXES = ["douyin.com", "douyinvod.com", "iesdouyin.com", "snssdk.com", "amemv.com"];
 const BILIBILI_HOST_SUFFIXES = ["bilibili.com", "b23.tv", "bilivideo.com", "hdslb.com"];
 
-export function normalizeVideoUrl(value) {
-  if (typeof value !== "string") return value;
+export function normalizeVideoUrl(value: string): string {
   const normalized = value.trim();
   if (normalized.startsWith("//")) return `https:${normalized}`;
   if (!/^[a-z][a-z\d+.-]*:/i.test(normalized) && /^[^/\s]+\.[^/\s]+/.test(normalized)) {
@@ -13,9 +12,9 @@ export function normalizeVideoUrl(value) {
   return normalized;
 }
 
-export function headersForVideoUrl(value) {
+export function headersForVideoUrl(value: string): Record<string, string> {
   const parsed = new URL(value);
-  const headers = {
+  const headers: Record<string, string> = {
     accept: "video/mp4,video/*;q=0.9,*/*;q=0.8",
     "user-agent": browserUserAgent,
     "cache-control": "no-cache"
@@ -30,16 +29,15 @@ export function headersForVideoUrl(value) {
   return headers;
 }
 
-export function isDouyinHost(hostname) {
+function matchesSuffix(hostname: string, suffixes: string[]): boolean {
   const normalized = hostname.toLowerCase();
-  return DOUYIN_HOST_SUFFIXES.some(
-    (suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`)
-  );
+  return suffixes.some((suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`));
 }
 
-export function isBilibiliHost(hostname) {
-  const normalized = hostname.toLowerCase();
-  return BILIBILI_HOST_SUFFIXES.some(
-    (suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`)
-  );
+export function isDouyinHost(hostname: string): boolean {
+  return matchesSuffix(hostname, DOUYIN_HOST_SUFFIXES);
+}
+
+export function isBilibiliHost(hostname: string): boolean {
+  return matchesSuffix(hostname, BILIBILI_HOST_SUFFIXES);
 }

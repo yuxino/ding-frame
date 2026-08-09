@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // 盯帧无头模式：脚本化分析一个本地视频或视频 URL，结果以 JSON 输出。
 // 用法：
-//   node src/server/cli.js <视频文件路径或视频URL> [--json 结果文件] [--frames-dir 保留关键帧的目录]
-// 进度信息输出到 stderr，分析结果输出到 stdout（或 --json 指定文件），方便管道与批量脚本。
+//   node dist-server/cli.js <视频文件路径或视频URL> [--json 结果文件] [--frames-dir 保留关键帧的目录]
+// 进度信息输出到 stderr，分析结果输出到 stdout（或 --json 指定文件），方便管道处理。
 import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
@@ -12,25 +12,27 @@ import { config } from "./config.js";
 import { analyzeMedia } from "./pipeline.js";
 import { headersForVideoUrl } from "./url-source.js";
 
-const HELP = `盯帧无头分析
+const HELP = `盯帧无头模式
 
 用法：
-  node src/server/cli.js <视频文件路径或视频URL> [选项]
+  node dist-server/cli.js <视频文件路径或视频URL> [选项]
 
 选项：
-  --json <路径>       把分析结果写入文件（默认打印到标准输出）
-  --frames-dir <路径> 保留关键帧图片到该目录（默认分析完即删）
-  --help              显示帮助
-
-示例：
-  node src/server/cli.js ./demo.mp4
-  node src/server/cli.js https://example.com/video.mp4 --json result.json --frames-dir ./frames
+  --json <路径>        把分析结果写入文件
+  --frames-dir <路径>  保留关键帧图片到该目录
+  -h, --help           显示帮助
 `;
 
-async function main() {
+interface CliOptions {
+  input: string;
+  jsonPath: string | null;
+  framesDir: string | null;
+}
+
+async function main(): Promise<void> {
   const { input, jsonPath, framesDir } = parseArgs(process.argv.slice(2));
   const tempDir = await mkdtemp(join(config.tempRoot, "ding-frame-cli-"));
-  let inputPath;
+  let inputPath: string;
   try {
     inputPath = await prepareInput(input, tempDir);
     const title = basename(inputPath);
@@ -68,7 +70,7 @@ async function main() {
   }
 }
 
-async function prepareInput(input, tempDir) {
+async function prepareInput(input: string, tempDir: string): Promise<string> {
   if (/^https?:\/\//i.test(input)) {
     const outputPath = join(tempDir, "input.mp4");
     console.error(`[ding-frame] 下载 ${input}`);
@@ -84,8 +86,8 @@ async function prepareInput(input, tempDir) {
   return inputPath;
 }
 
-async function downloadInput(url, outputPath) {
-  let lastError;
+async function downloadInput(url: string, outputPath: string): Promise<void> {
+  let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       const response = await fetch(url, { redirect: "follow", headers: { ...headersForVideoUrl(url), "accept-encoding": "identity" }, signal: AbortSignal.timeout(60_000) });
@@ -94,21 +96,21 @@ async function downloadInput(url, outputPath) {
       if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，不是可直接下载的视频文件。");
       const contentLength = Number(response.headers.get("content-length") || 0);
       if (contentLength > config.maxUploadBytes) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
-      await streamToFile(Readable.fromWeb(response.body), outputPath, config.maxUploadBytes);
+      await streamToFile(Readable.fromWeb(response.body as import("node:stream/web").ReadableStream), outputPath, config.maxUploadBytes);
       return;
     } catch (error) {
       lastError = error;
-      if (error.message.startsWith("视频太大") || error.message.includes("不是可直接下载的视频")) throw error;
+      if (error instanceof Error && (error.message.startsWith("视频太大") || error.message.includes("不是可直接下载的视频"))) throw error;
       if (attempt < 3) console.error(`[ding-frame] 视频没有完整到达，正在重新取回（${attempt}/3）。`);
     }
   }
-  throw new Error(`视频下载不完整，已自动重试 3 次。${lastError ? ` ${lastError.message}` : ""}`);
+  throw new Error(`视频下载不完整，已自动重试 3 次。${lastError instanceof Error ? ` ${lastError.message}` : ""}`);
 }
 
-async function streamToFile(readable, outputPath, maxBytes) {
+async function streamToFile(readable: NodeJS.ReadableStream, outputPath: string, maxBytes: number): Promise<number> {
   let bytes = 0;
   const counter = new Transform({
-    transform(chunk, encoding, callback) {
+    transform(chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: Buffer) => void) {
       bytes += chunk.length;
       if (bytes > maxBytes) return callback(new Error(`视频太大了，第一版最多支持 ${Math.round(maxBytes / 1024 / 1024)} MB。`));
       callback(null, chunk);
@@ -118,8 +120,8 @@ async function streamToFile(readable, outputPath, maxBytes) {
   return bytes;
 }
 
-function parseArgs(args) {
-  const options = { input: null, jsonPath: null, framesDir: null };
+function parseArgs(args: string[]): CliOptions {
+  const options: CliOptions = { input: "", jsonPath: null, framesDir: null };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--help" || arg === "-h") {
@@ -144,6 +146,6 @@ function parseArgs(args) {
 }
 
 main().catch((error) => {
-  console.error(`[ding-frame] ${error.message}`);
+  console.error(`[ding-frame] ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });

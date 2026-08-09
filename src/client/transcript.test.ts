@@ -27,8 +27,8 @@ describe("minute transcript timeline", () => {
 
   it("uses real speaker ids when a diarization provider supplies them", () => {
     const [group] = groupTranscriptByMinute([
-      { startMs: 0, endMs: 4_000, text: "你好。", speaker: 0 },
-      { startMs: 6_000, endMs: 9_000, text: "你好。", speaker: 1 }
+      { startMs: 0, endMs: 4_000, text: "你好。", speaker: "0" },
+      { startMs: 6_000, endMs: 9_000, text: "你好。", speaker: "1" }
     ], 10_000);
 
     expect(group.speakerLabel).toBe("2 位说话人");

@@ -1,12 +1,12 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { isIP } from "node:net";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
-import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
+import { createJob, getJob, purgeJob, serializeJob, updateJob, type Job } from "./jobs.js";
 import { getTempAudio } from "./temp-audio.js";
 import { enqueueAnalysis } from "./pipeline.js";
 import { streamToFile } from "./download.js";
@@ -19,8 +19,8 @@ await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBy
 
 app.get("/api/health", async () => ({ ok: true, service: "ding-frame", asrProvider: config.asrProvider, analysisProvider: config.analysisProvider, configured: { asr: asrIsConfigured(), analysis: analysisIsConfigured() }, mock: { asr: config.asrProvider === "mock", analysis: config.analysisProvider === "mock" } }));
 
-app.post("/api/analyze/upload", async (request, reply) => {
-  let job;
+app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyReply) => {
+  let job: Job | undefined;
   try {
     const part = await request.file();
     if (!part) return reply.code(400).send({ error: "没有找到视频文件。" });
@@ -29,20 +29,21 @@ app.post("/api/analyze/upload", async (request, reply) => {
     const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
     job.inputPath = inputPath;
     job.inputMimeType = part.mimetype;
-    await streamToFile(part.file, inputPath, config.maxUploadBytes);
+    await streamToFile(part.file as unknown as NodeJS.ReadableStream, inputPath, config.maxUploadBytes);
     if (part.file.truncated) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
     if (job) await purgeJob(job.id);
-    return reply.code(error.statusCode || 400).send({ error: error.message });
+    return reply.code(statusCodeOf(error) || 400).send({ error: messageOf(error) });
   }
 });
 
-app.post("/api/analyze/url", async (request, reply) => {
-  let job;
+app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply) => {
+  let job: Job | undefined;
   try {
-    const rawUrl = request.body?.url;
+    const body = request.body as { url?: unknown } | undefined;
+    const rawUrl = body?.url;
     const url = normalizeVideoUrl(extractUrlFromText(rawUrl) || (typeof rawUrl === "string" ? rawUrl.trim() : ""));
     validateVideoUrl(url);
     job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址" });
@@ -53,22 +54,22 @@ app.post("/api/analyze/url", async (request, reply) => {
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
     if (job) await purgeJob(job.id);
-    return reply.code(error.statusCode || 400).send({ error: error.message });
+    return reply.code(statusCodeOf(error) || 400).send({ error: messageOf(error) });
   }
 });
 
-app.get("/api/jobs/:id", async (request, reply) => {
+app.get("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
   const job = getJob(request.params.id);
   if (!job) return reply.code(404).send({ error: "这次分析已经消失了。" });
   return reply.header("cache-control", "no-store").send(serializeJob(job));
 });
 
-app.delete("/api/jobs/:id", async (request, reply) => {
+app.delete("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
   await purgeJob(request.params.id);
   return reply.code(204).send();
 });
 
-app.get("/api/jobs/:id/frames/:filename", async (request, reply) => {
+app.get("/api/jobs/:id/frames/:filename", async (request: FastifyRequest<{ Params: { id: string; filename: string } }>, reply: FastifyReply) => {
   const job = getJob(request.params.id);
   if (!job || !job.result) return reply.code(404).send({ error: "这张抽帧已经消失了。" });
   const filename = basename(request.params.filename);
@@ -85,7 +86,7 @@ app.get("/api/jobs/:id/frames/:filename", async (request, reply) => {
 });
 
 // 说话人分离时把整段音频临时挂在公网地址上，交给百炼异步转写回源；只允许读取已登记的本机文件。
-app.get("/api/temp/:token", async (request, reply) => {
+app.get("/api/temp/:token", async (request: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
   const filePath = getTempAudio(request.params.token);
   if (!filePath) return reply.code(404).send({ error: "这个临时文件已经消失了。" });
   try {
@@ -100,7 +101,7 @@ app.get("/api/temp/:token", async (request, reply) => {
   }
 });
 
-app.get("/api/jobs/:id/video", async (request, reply) => {
+app.get("/api/jobs/:id/video", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
   const job = getJob(request.params.id);
   if (!job?.result || !job.inputPath) return reply.code(404).send({ error: "这段视频已经消失了。" });
   try {
@@ -144,14 +145,14 @@ try {
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
 
-function validateVideoUrl(value) {
+function validateVideoUrl(value: string): void {
   if (typeof value !== "string" || !value.trim()) throw new Error("请输入视频地址。");
   const parsed = new URL(value);
   if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("只支持 http 或 https 视频地址。");
   if (isPrivateHost(parsed.hostname)) throw new Error("不支持访问本机或内网地址。");
 }
 
-function isPrivateHost(hostname) {
+function isPrivateHost(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (["localhost", "0.0.0.0", "::1"].includes(normalized) || normalized.endsWith(".local") || normalized.endsWith(".internal")) return true;
   if (isIP(normalized) !== 4) return isIP(normalized) === 6 && (normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:"));
@@ -159,12 +160,20 @@ function isPrivateHost(hostname) {
   return octets[0] === 10 || octets[0] === 127 || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) || (octets[0] === 192 && octets[1] === 168) || (octets[0] === 169 && octets[1] === 254);
 }
 
-function extensionFor(filename) {
+function extensionFor(filename: string): string {
   const extension = filename.match(/\.[a-z0-9]{2,5}$/i)?.[0]?.toLowerCase();
   return extension || ".mp4";
 }
 
-function normalizeVideoContentType(value) {
+function normalizeVideoContentType(value: string | undefined): string {
   const type = typeof value === "string" ? value.split(";", 1)[0].trim().toLowerCase() : "";
   return type.startsWith("video/") ? type : "video/mp4";
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function statusCodeOf(error: unknown): number | undefined {
+  return (error as { statusCode?: number })?.statusCode;
 }

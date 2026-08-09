@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { config } from "./config.js";
 import { registerTempAudio, removeTempAudio } from "./temp-audio.js";
 import { extractFullAudio } from "./video.js";
+import type { AudioSegment, TranscriptLine } from "./types.js";
 
 // 字幕级听写走同步 Fun-ASR-Flash（base64 直传，无需公网地址），
 // 返回词级时间戳后按标点/停顿聚合为字幕行。
@@ -11,6 +12,18 @@ import { extractFullAudio } from "./video.js";
 // 整段音频一次性交给模型，返回每句的 speaker_id。
 const syncAsrModel = "fun-asr-flash-2026-06-15";
 const asyncAsrModel = "fun-asr";
+
+interface TranscribeOptions {
+  audioSegments?: AudioSegment[];
+  durationMs?: number;
+  fetchImpl?: typeof fetch;
+  provider?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  maxBytes?: number;
+  timeoutMs?: number;
+}
 
 export async function transcribe({
   audioSegments,
@@ -22,12 +35,12 @@ export async function transcribe({
   model = config.dashscopeModel,
   maxBytes = config.asrMaxSegmentBytes,
   timeoutMs = config.dashscopeTimeoutMs
-}) {
+}: TranscribeOptions): Promise<TranscriptLine[]> {
   if (provider === "mock") return mockTranscript(durationMs);
   if (provider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${provider}`);
   if (!apiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用真实听写。");
 
-  const transcript = [];
+  const transcript: TranscriptLine[] = [];
   for (const segment of audioSegments || []) {
     const lines = await requestSegmentSubtitle({
       segment,
@@ -49,7 +62,19 @@ export async function transcribe({
   return transcript;
 }
 
-export async function transcribeFullAudio({ inputPath, durationMs, audioDir, publicBaseUrl, fetchImpl = fetch }) {
+export async function transcribeFullAudio({
+  inputPath,
+  durationMs,
+  audioDir,
+  publicBaseUrl,
+  fetchImpl = fetch
+}: {
+  inputPath: string;
+  durationMs?: number;
+  audioDir: string;
+  publicBaseUrl: string;
+  fetchImpl?: typeof fetch;
+}): Promise<TranscriptLine[]> {
   if (config.asrProvider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${config.asrProvider}`);
   if (!config.dashscopeApiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用真实听写。");
   if (!publicBaseUrl) throw new Error("说话人分离需要配置 PUBLIC_BASE_URL（服务的公网地址）。");
@@ -82,12 +107,12 @@ export async function transcribeFullAudio({ inputPath, durationMs, audioDir, pub
 
 // 把词级时间戳聚合成字幕行：遇到句号/问号/感叹号，或停顿超过 1.5 秒，
 // 或单行超过 8 秒就换行，保证每行是能直接回看的一小段。
-export function groupWordsToSubtitles(words, options = {}) {
+export function groupWordsToSubtitles(words: Array<{ begin_time?: number; end_time?: number; text?: string; punctuation?: string }>, options: { maxLineMs?: number; minGapMs?: number; minLineMs?: number } = {}): TranscriptLine[] {
   const { maxLineMs = 8000, minGapMs = 1500, minLineMs = 1200 } = options;
-  const lines = [];
-  let buffer = [];
-  let startMs = null;
-  let endMs = null;
+  const lines: TranscriptLine[] = [];
+  let buffer: typeof words = [];
+  let startMs: number | null = null;
+  let endMs: number | null = null;
   let lastWasTerminal = false;
 
   const flush = () => {
@@ -132,7 +157,15 @@ export async function requestSegmentSubtitle({
   maxBytes = 8 * 1024 * 1024,
   timeoutMs = 120000,
   fetchImpl = fetch
-}) {
+}: {
+  segment: AudioSegment;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  maxBytes?: number;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<TranscriptLine[]> {
   const audio = await readFile(segment.path);
   if (audio.byteLength > maxBytes) {
     throw new Error(`音频切片超过 ${Math.round(maxBytes / 1024 / 1024)} MB，请缩短 ASR_SEGMENT_SECONDS。`);
@@ -159,9 +192,9 @@ export async function requestSegmentSubtitle({
     }),
     signal: AbortSignal.timeout(timeoutMs)
   });
-  const body = await response.json().catch(() => ({}));
+  const body = await response.json().catch(() => ({})) as FunAsrSyncResponse;
   if (!response.ok) {
-    const message = body.output?.message || body.message || body.code || `听写模型请求失败：${response.status}`;
+    const message = body.output?.message || (body as { message?: string }).message || (body as { code?: string }).code || `听写模型请求失败：${response.status}`;
     // 这一整段没有可识别的人声（纯音乐/静音等），跳过而不是中断整个任务
     if (/ASR_RESPONSE_HAVE_NO_WORDS/.test(String(message))) return [];
     throw new Error(message);
@@ -176,7 +209,14 @@ export async function requestSegmentSubtitle({
   return groupWordsToSubtitles(words);
 }
 
-async function submitAsrTask({ fileUrl, apiKey, baseUrl, model, timeoutMs, fetchImpl = fetch }) {
+async function submitAsrTask({ fileUrl, apiKey, baseUrl, model, timeoutMs, fetchImpl = fetch }: {
+  fileUrl: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  fetchImpl?: typeof fetch;
+}): Promise<string> {
   const response = await fetchImpl(`${nativeBaseUrl(baseUrl)}/services/audio/asr/transcription`, {
     method: "POST",
     headers: {
@@ -191,7 +231,7 @@ async function submitAsrTask({ fileUrl, apiKey, baseUrl, model, timeoutMs, fetch
     }),
     signal: AbortSignal.timeout(timeoutMs)
   });
-  const body = await response.json().catch(() => ({}));
+  const body = await response.json().catch(() => ({})) as { output?: { message?: string; task_id?: string }; message?: string; code?: string };
   if (!response.ok) {
     throw new Error(body.output?.message || body.message || body.code || `听写任务提交失败：${response.status}`);
   }
@@ -200,7 +240,14 @@ async function submitAsrTask({ fileUrl, apiKey, baseUrl, model, timeoutMs, fetch
   return taskId;
 }
 
-async function pollAsrTask({ taskId, apiKey, baseUrl, timeoutMs, intervalMs = 2500, fetchImpl = fetch }) {
+async function pollAsrTask({ taskId, apiKey, baseUrl, timeoutMs, intervalMs = 2500, fetchImpl = fetch }: {
+  taskId: string;
+  apiKey: string;
+  baseUrl: string;
+  timeoutMs: number;
+  intervalMs?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<AsrTaskResponse> {
   const endpoint = `${nativeBaseUrl(baseUrl)}/tasks/${taskId}`;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -209,7 +256,7 @@ async function pollAsrTask({ taskId, apiKey, baseUrl, timeoutMs, intervalMs = 25
       headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       signal: AbortSignal.timeout(30_000)
     });
-    const body = await response.json().catch(() => ({}));
+    const body = await response.json().catch(() => ({})) as AsrTaskResponse;
     const status = body.output?.task_status;
     if (status === "SUCCEEDED") return body;
     if (status === "FAILED") throw new Error(`听写任务失败：${body.output?.message || "未知原因"}`);
@@ -218,10 +265,14 @@ async function pollAsrTask({ taskId, apiKey, baseUrl, timeoutMs, intervalMs = 25
   throw new Error("听写任务超时，请稍后重试。");
 }
 
-export async function parseDiarizationTask(task, { apiKey, timeoutMs, fetchImpl = fetch }) {
+export async function parseDiarizationTask(task: AsrTaskResponse, { apiKey, timeoutMs, fetchImpl = fetch }: {
+  apiKey: string;
+  timeoutMs: number;
+  fetchImpl?: typeof fetch;
+}): Promise<TranscriptLine[]> {
   const results = task.output?.results || [];
   const succeeded = results.find((result) => result.subtask_status === "SUCCEEDED" && result.transcription_url);
-  if (!succeeded) {
+  if (!succeeded?.transcription_url) {
     const failed = results.find((result) => result.subtask_status === "FAILED");
     throw new Error(failed?.message || "听写任务没有成功结果。");
   }
@@ -230,7 +281,7 @@ export async function parseDiarizationTask(task, { apiKey, timeoutMs, fetchImpl 
     signal: AbortSignal.timeout(timeoutMs)
   });
   if (!response.ok) throw new Error(`听写结果下载失败：${response.status}`);
-  const data = await response.json();
+  const data = await response.json() as { transcripts?: Array<{ sentences?: Array<{ begin_time?: number; end_time?: number; text?: string; speaker_id?: number }> }> };
   const sentences = data.transcripts?.[0]?.sentences || [];
   return sentences
     .map((sentence) => ({
@@ -242,17 +293,17 @@ export async function parseDiarizationTask(task, { apiKey, timeoutMs, fetchImpl 
     .filter((line) => line.text);
 }
 
-function nativeBaseUrl(compatibleBaseUrl) {
+function nativeBaseUrl(compatibleBaseUrl: string): string {
   const cleaned = String(compatibleBaseUrl || "").replace(/\/+$/, "");
   if (cleaned.includes("/compatible-mode/v1")) return cleaned.replace(/\/compatible-mode\/v1$/, "/api/v1");
   return "https://dashscope.aliyuncs.com/api/v1";
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function mockTranscript(durationMs) {
+function mockTranscript(durationMs?: number): TranscriptLine[] {
   const duration = Math.max(1, durationMs || 30000);
   const snippets = [
     "这是一段临时演示听写，真实配置后会替换成视频里的声音。",
@@ -266,10 +317,40 @@ function mockTranscript(durationMs) {
   });
 }
 
-export function compactTranscriptText(value) {
-  return (typeof value === "string" ? value : "")
+export function compactTranscriptText(value: string): string {
+  return (value || "")
     .trim()
     .replace(/\s+/g, " ")
     .replace(/([啊哦嗯哈诶哎呃唉喔噢呀嘿])\1{2,}/gu, "$1…")
     .replace(/([！!?？。])\1{2,}/gu, "$1");
+}
+
+interface FunAsrSyncResponse {
+  output?: {
+    output?: {
+      sentence?: {
+        text?: string;
+        words?: Array<{ begin_time?: number; end_time?: number; text?: string; punctuation?: string }>;
+      };
+    };
+    sentence?: {
+      text?: string;
+      words?: Array<{ begin_time?: number; end_time?: number; text?: string; punctuation?: string }>;
+    };
+    message?: string;
+  };
+  message?: string;
+  code?: string;
+}
+
+interface AsrTaskResponse {
+  output?: {
+    task_status?: string;
+    message?: string;
+    results?: Array<{
+      subtask_status?: string;
+      transcription_url?: string;
+      message?: string;
+    }>;
+  };
 }

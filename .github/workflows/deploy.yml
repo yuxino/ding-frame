@@ -32,8 +32,8 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build client
-        run: npm run build:client
+      - name: Build
+        run: npm run build
 
       - name: Check deployment secrets
         id: deploy-secrets
@@ -55,7 +55,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: "dist/,src/,package.json,package-lock.json"
+          source: "dist/,dist-server/,package.json,package-lock.json"
           target: ${{ steps.deploy-meta.outputs.deploy_target }}
           strip_components: 0
 
@@ -90,5 +90,5 @@ jobs:
             PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
             EOF
             chmod 600 .env
-            pm2 describe ding-frame >/dev/null 2>&1 && pm2 reload ding-frame --update-env || pm2 start src/server/index.js --name ding-frame
+            pm2 describe ding-frame >/dev/null 2>&1 && pm2 reload ding-frame --update-env || pm2 start dist-server/index.js --name ding-frame
             pm2 save

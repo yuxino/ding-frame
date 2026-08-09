@@ -4,19 +4,27 @@ import { config } from "./config.js";
 import { analyze } from "./analysis.js";
 import { transcribe, transcribeFullAudio } from "./asr.js";
 import { downloadUrl } from "./download.js";
-import { updateJob } from "./jobs.js";
+import { updateJob, type AnalysisResult, type Job, type JobProgress } from "./jobs.js";
 import { resolveVideoUrl } from "./resolver.js";
 import { extractAudioSegments, extractFrames, inspectVideo } from "./video.js";
 
-export function enqueueAnalysis(job) {
+export function enqueueAnalysis(job: Job): void {
   setImmediate(() => runAnalysis(job).catch((error) => {
-    updateJob(job, { status: "failed", error: error.message, progress: { stage: "failed", percent: 100, detail: error.message } });
+    updateJob(job, { status: "failed", error: error instanceof Error ? error.message : String(error), progress: { stage: "failed", percent: 100, detail: error instanceof Error ? error.message : String(error) } });
   }));
+}
+
+interface AnalyzeMediaOptions {
+  inputPath: string;
+  title: string;
+  framesDir: string;
+  audioDir: string;
+  onProgress?: (progress: JobProgress) => void;
 }
 
 // 与 job 解耦的媒体分析管线，HTTP 任务与 headless CLI 共用。
 // 输入文件与帧目录的生命周期由调用方负责；音频切片作为中间产物在这里即时清理。
-export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onProgress = () => {} }) {
+export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onProgress = () => {} }: AnalyzeMediaOptions): Promise<AnalysisResult> {
   onProgress({ stage: "inspecting", percent: 12, detail: "正在读取视频尺寸和时长。" });
   const media = await inspectVideo(inputPath);
   if (!media.hasVideo) throw new Error("这个文件里没有视频画面，请换一个带画面的视频。");
@@ -26,7 +34,7 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onPr
 
   onProgress({ stage: "extracting_audio", percent: 46, detail: "把声音整理成适合听写的轨道。" });
   await mkdir(audioDir, { recursive: true });
-  let transcript = [];
+  let transcript: Awaited<ReturnType<typeof transcribe>> = [];
   if (media.hasAudio) {
     if (config.asrDiarization && config.asrProvider === "dashscope") {
       onProgress({ stage: "transcribing", percent: 60, detail: "正在做说话人分离与听写。" });
@@ -49,11 +57,11 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onPr
   return result;
 }
 
-async function runAnalysis(job) {
+async function runAnalysis(job: Job): Promise<void> {
   const framesDir = join(job.dir, "frames");
   const audioDir = join(job.dir, "audio");
   let completed = false;
-  let inputPath = job.inputPath;
+  let inputPath: string | undefined = job.inputPath;
   try {
     updateJob(job, { status: "processing" });
     if (job.sourceUrl) {
@@ -69,6 +77,7 @@ async function runAnalysis(job) {
       });
       job.inputMimeType = download.contentType;
     }
+    if (!inputPath) throw new Error("视频文件尚未就绪。");
     const result = await analyzeMedia({
       inputPath,
       title: job.title,
@@ -81,7 +90,7 @@ async function runAnalysis(job) {
   } finally {
     // 成功时保留原视频与抽帧供结果页回看，等 TTL 到期整体清除；
     // 失败时中间产物没有展示价值，连同音频一起立即清理。
-    if (!completed) {
+    if (!completed && inputPath) {
       await rm(inputPath, { force: true }).catch(() => undefined);
       await rm(framesDir, { recursive: true, force: true }).catch(() => undefined);
     }

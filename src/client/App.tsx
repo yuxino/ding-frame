@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
 
 const stageLabels = {
   queued: "排队中",
@@ -13,14 +13,72 @@ const stageLabels = {
   failed: "需要重试"
 };
 
-function formatTime(milliseconds) {
+type Stage = keyof typeof stageLabels | string;
+
+interface JobProgress {
+  stage: Stage;
+  percent: number;
+  detail: string;
+}
+
+interface TranscriptLine {
+  startMs: number;
+  endMs: number;
+  text: string;
+  speaker?: string;
+}
+
+interface Frame {
+  filename: string;
+  atMs: number;
+  caption?: string;
+  url: string;
+}
+
+interface Highlight {
+  atMs: number;
+  title: string;
+  detail: string;
+}
+
+interface Tag {
+  label: string;
+  category: string;
+  atMs: number;
+}
+
+interface AnalysisResult {
+  title: string;
+  durationMs: number;
+  summary: string;
+  tags: Tag[];
+  highlights: Highlight[];
+  transcript: TranscriptLine[];
+  hasSubtitles?: boolean;
+  frames: Frame[];
+  videoUrl: string;
+}
+
+interface Job {
+  id: string;
+  source: "upload" | "url";
+  title: string;
+  createdAt: number;
+  expiresAt: number;
+  status: "queued" | "processing" | "done" | "failed";
+  progress: JobProgress;
+  result: AnalysisResult | null;
+  error: string | null;
+}
+
+function formatTime(milliseconds: number | undefined): string {
   const totalSeconds = Math.max(0, Math.round((milliseconds || 0) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = String(totalSeconds % 60).padStart(2, "0");
   return `${minutes}:${seconds}`;
 }
 
-function formatDate(timestamp) {
+function formatDate(timestamp: number): string {
   return new Intl.DateTimeFormat("zh-CN", {
     month: "numeric",
     day: "numeric",
@@ -29,8 +87,10 @@ function formatDate(timestamp) {
   }).format(new Date(timestamp));
 }
 
-function Glyph({ name, size = 18 }) {
-  const icons = {
+type GlyphName = "arrow" | "clock" | "frame" | "info" | "link" | "play" | "spark" | "trash" | "upload" | "voice" | "cc";
+
+function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
+  const icons: Record<GlyphName, ReactNode> = {
     arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
     clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></>,
     frame: <><path d="M8 3H4a1 1 0 0 0-1 1v4" /><path d="M16 3h4a1 1 0 0 1 1 1v4" /><path d="M8 21H4a1 1 0 0 1-1-1v-4" /><path d="M16 21h4a1 1 0 0 0 1-1v-4" /></>,
@@ -55,42 +115,42 @@ function Brand() {
 }
 
 function App() {
-  const [mode, setMode] = useState("url");
-  const [file, setFile] = useState(null);
+  const [mode, setMode] = useState<"upload" | "url">("url");
+  const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
-  const [job, setJob] = useState(null);
+  const [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasResult = job?.status === "done" && job.result;
   const progress = job?.progress?.percent ?? 0;
 
   useEffect(() => {
-    if (!job?.id || ["done", "failed"].includes(job.status)) return undefined;
+    if (!job?.id || job.status === "done" || job.status === "failed") return undefined;
 
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" });
         if (!response.ok) throw new Error("任务已经消失了");
-        setJob(await response.json());
+        setJob(await response.json() as Job);
       } catch (pollError) {
-        setError(pollError.message);
+        setError(pollError instanceof Error ? pollError.message : String(pollError));
       }
     }, 1200);
 
     return () => window.clearInterval(timer);
   }, [job?.id, job?.status]);
 
-  async function startAnalysis(event) {
+  async function startAnalysis(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
     setJob(null);
 
     try {
-      let response;
+      let response: Response;
       if (mode === "upload") {
         if (!file) throw new Error("先放入一个小视频");
         const formData = new FormData();
@@ -105,12 +165,12 @@ function App() {
         });
       }
 
-      const body = await response.json().catch(() => ({}));
+      const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
       if (!response.ok) throw new Error(body.error || "没有成功开始分析");
       const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
-      setJob(await jobResponse.json());
+      setJob(await jobResponse.json() as Job);
     } catch (submitError) {
-      setError(submitError.message);
+      setError(submitError instanceof Error ? submitError.message : String(submitError));
     } finally {
       setBusy(false);
     }
@@ -124,7 +184,7 @@ function App() {
     setUrl("");
   }
 
-  function selectFile(nextFile) {
+  function selectFile(nextFile: File | undefined) {
     if (!nextFile) return;
     setFile(nextFile);
     setError("");
@@ -169,13 +229,13 @@ function App() {
                 <div
                   className={`drop-zone ${file ? "has-file" : ""}`}
                   onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }}
+                  onDragOver={(event: DragEvent) => event.preventDefault()}
+                  onDrop={(event: DragEvent) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }}
                   role="button"
-                  tabIndex="0"
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click(); }}
+                  tabIndex={0}
+                  onKeyDown={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click(); }}
                 >
-                  <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event) => selectFile(event.target.files?.[0])} />
+                  <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
                   <span className="drop-icon"><Glyph name="upload" size={22} /></span>
                   <strong>{file ? file.name : "拖进来，或点这里选择"}</strong>
                   <small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · 已准备好` : "MP4、MOV、WebM · 最长 15 分钟"}</small>
@@ -205,7 +265,7 @@ function App() {
   );
 }
 
-function ProgressView({ job, progress, error, onClear }) {
+function ProgressView({ job, progress, error, onClear }: { job: Job; progress: number; error: string; onClear: () => void }) {
   return (
     <section className="progress-layout">
       <div className="progress-copy">
@@ -215,7 +275,7 @@ function ProgressView({ job, progress, error, onClear }) {
       </div>
       <div className="progress-card">
         <div className="progress-mascot"><img src="/ding-frame-icon.png" alt="" /></div>
-        <div className="progress-status"><span>{stageLabels[job.progress?.stage] || "处理中"}</span><strong>{progress}%</strong></div>
+        <div className="progress-status"><span>{job.progress ? stageLabels[job.progress.stage as keyof typeof stageLabels] || "处理中" : "处理中"}</span><strong>{progress}%</strong></div>
         <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
         <p>{job.progress?.detail || "正在准备…"}</p>
         {error && <div className="inline-error">{error}</div>}
@@ -226,8 +286,8 @@ function ProgressView({ job, progress, error, onClear }) {
   );
 }
 
-function FitTitle({ children }) {
-  const ref = useRef(null);
+function FitTitle({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     const element = ref.current;
     if (!element) return undefined;
@@ -248,13 +308,13 @@ function FitTitle({ children }) {
   return <h1 ref={ref}>{children}</h1>;
 }
 
-function ResultView({ job, onClear }) {
+function ResultView({ job, onClear }: { job: Job; onClear: () => void }) {
+  const result = job.result as AnalysisResult;
   const [remaining, setRemaining] = useState(Math.max(0, job.expiresAt - Date.now()));
-  const result = job.result;
   const [selectedFrame, setSelectedFrame] = useState(0);
   const [currentMs, setCurrentMs] = useState(0);
   const [showSubtitles, setShowSubtitles] = useState(false);
-  const videoRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setRemaining(Math.max(0, job.expiresAt - Date.now())), 1000);
@@ -272,14 +332,15 @@ function ResultView({ job, onClear }) {
     ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs)
     : null;
   const countdown = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
-  const activeMinute = Math.floor(currentMs / 60000);
 
-  function syncToTime(atMs, shouldPlay = true) {
+  function syncToTime(atMs: number, shouldPlay = true) {
     const targetMs = Math.min(result.durationMs || atMs, Math.max(0, Number(atMs) || 0));
     const video = videoRef.current;
     const seek = () => {
-      video.currentTime = targetMs / 1000;
-      if (shouldPlay) video.play().catch(() => undefined);
+      const element = videoRef.current;
+      if (!element) return;
+      element.currentTime = targetMs / 1000;
+      if (shouldPlay) element.play().catch(() => undefined);
     };
     if (video) {
       if (video.readyState >= 1) seek();
@@ -354,7 +415,7 @@ function ResultView({ job, onClear }) {
   );
 }
 
-function frameIndexAtTime(frames, atMs) {
+function frameIndexAtTime(frames: Frame[], atMs: number): number {
   let nearest = 0;
   for (let index = 0; index < frames.length; index += 1) {
     if (frames[index].atMs > atMs) break;
@@ -363,7 +424,7 @@ function frameIndexAtTime(frames, atMs) {
   return nearest;
 }
 
-function InfoModal({ onClose }) {
+function InfoModal({ onClose }: { onClose: () => void }) {
   return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><img src="/ding-frame-icon-64.png" alt="" /><span className="page-label">ABOUT DINGFRAME</span><h2 id="info-title">只留下看懂的结果。</h2><p>视频会暂存在服务端，用来抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起消失。</p><p className="modal-muted">无需 Bucket。配置百炼 API Key 后即可使用真实 ASR 与视觉分析；没有配置时会用演示数据跑完整流程。</p><button className="primary-button" type="button" onClick={onClose}>知道了<Glyph name="arrow" size={17} /></button></div></div>;
 }
 

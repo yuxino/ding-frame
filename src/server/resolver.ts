@@ -3,8 +3,22 @@ import { isBilibiliHost, isDouyinHost } from "./url-source.js";
 
 const douyinPageUserAgent =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+const browserLikeUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
 
-const defaultOptions = {
+export interface ResolvedVideo {
+  url: string;
+  title?: string;
+  source: "douyin" | "bilibili" | "ytdlp" | "direct";
+  referer?: string;
+}
+
+interface ResolveOptions {
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  maxRedirects?: number;
+}
+
+const defaultOptions: Required<ResolveOptions> = {
   fetchImpl: fetch,
   timeoutMs: 30_000,
   maxRedirects: 6
@@ -12,7 +26,7 @@ const defaultOptions = {
 
 // 从分享文案里挑出第一条 http(s) 链接，例如抖音的
 // “8.88 复制打开抖音… https://v.douyin.com/xxxx/”。
-export function extractUrlFromText(value) {
+export function extractUrlFromText(value: unknown): string {
   if (typeof value !== "string") return "";
   const match = value.match(/https?:\/\/[^\s<>"'，。；、！？）\]】]+/i);
   if (!match) return "";
@@ -20,12 +34,11 @@ export function extractUrlFromText(value) {
 }
 
 // 把 _ROUTER_DATA 里的播放地址里 playwm（带水印）换成 play（无水印）。
-export function deWatermark(url) {
-  return typeof url === "string" ? url.replace("/playwm/", "/play/") : url;
+export function deWatermark(url: string): string {
+  return url.replace("/playwm/", "/play/");
 }
 
-export function looksLikeDouyinLink(value) {
-  if (typeof value !== "string") return false;
+export function looksLikeDouyinLink(value: string): boolean {
   try {
     return isDouyinHost(new URL(value).hostname);
   } catch {
@@ -33,28 +46,11 @@ export function looksLikeDouyinLink(value) {
   }
 }
 
-// 解析抖音分享页。返回 { url, title } 或 null。
-export function parseDouyinPage(html) {
-  const routerJson = extractRouterData(html);
-  if (routerJson) {
-    try {
-      const found = findVideoInRouterData(JSON.parse(routerJson));
-      if (found) return found;
-    } catch {
-      // 继续尝试 og:video
-    }
-  }
-  const ogVideo = extractOgVideo(html);
-  if (ogVideo) return { url: deWatermark(ogVideo), title: undefined };
-  return null;
-}
-
-
 // 从抖音链接里提取视频 ID 并转成分享页地址：
 // - www.douyin.com/jingxuan/search/...?modal_id=<id>（精选/搜索弹窗）
 // - www.douyin.com/video/<id>、www.iesdouyin.com/share/video/<id>
 // 分享页是服务端渲染，HTML 里带 _ROUTER_DATA，解析最稳。
-export function douyinShareUrl(value) {
+export function douyinShareUrl(value: string): string | null {
   try {
     const parsed = new URL(value);
     if (!isDouyinHost(parsed.hostname)) return null;
@@ -68,7 +64,23 @@ export function douyinShareUrl(value) {
   return null;
 }
 
-export async function resolveDouyinVideo(value, options = {}) {
+// 解析抖音分享页。返回 { url, title } 或 null。
+export function parseDouyinPage(html: string): { url: string; title?: string } | null {
+  const routerJson = extractRouterData(html);
+  if (routerJson) {
+    try {
+      const found = findVideoInRouterData(JSON.parse(routerJson) as RouterData);
+      if (found) return found;
+    } catch {
+      // 继续尝试 og:video
+    }
+  }
+  const ogVideo = extractOgVideo(html);
+  if (ogVideo) return { url: deWatermark(ogVideo), title: undefined };
+  return null;
+}
+
+export async function resolveDouyinVideo(value: string, options: ResolveOptions = {}): Promise<ResolvedVideo> {
   const { fetchImpl, timeoutMs, maxRedirects } = { ...defaultOptions, ...options };
   const headers = {
     "user-agent": douyinPageUserAgent,
@@ -101,34 +113,9 @@ export async function resolveDouyinVideo(value, options = {}) {
   throw new Error("抖音链接重定向次数太多，暂时解析不了。");
 }
 
-const browserLikeUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
-
-export function looksLikeBilibiliLink(value) {
-  if (typeof value !== "string") return false;
-  try {
-    return isBilibiliHost(new URL(value).hostname);
-  } catch {
-    return false;
-  }
-}
-
-// 从 B 站链接里提取 BV 号：/video/BVxxx 路径或 bvid= 参数都行。
-export function bilibiliBvid(value) {
-  try {
-    const parsed = new URL(value);
-    const fromQuery = parsed.searchParams.get("bvid");
-    if (fromQuery && /^BV[0-9A-Za-z]{10,}$/.test(fromQuery)) return fromQuery;
-    const match = parsed.pathname.match(/(BV[0-9A-Za-z]{10,})/);
-    if (match) return match[1];
-  } catch {
-    // 交给外层报错
-  }
-  return null;
-}
-
 // B 站原生解析：官方接口拿视频信息（标题、cid）和播放直链，不需要登录。
 // b23.tv 短链先跟随重定向到正片地址。
-export async function resolveBilibiliVideo(value, options = {}) {
+export async function resolveBilibiliVideo(value: string, options: ResolveOptions = {}): Promise<ResolvedVideo> {
   const { fetchImpl, timeoutMs } = { ...defaultOptions, ...options };
   const headers = {
     "user-agent": browserLikeUserAgent,
@@ -152,17 +139,17 @@ export async function resolveBilibiliVideo(value, options = {}) {
     headers,
     signal: AbortSignal.timeout(timeoutMs)
   });
-  const viewBody = await viewResponse.json().catch(() => ({}));
+  const viewBody = await viewResponse.json().catch(() => ({})) as BilibiliViewResponse;
   if (viewBody.code !== 0) throw new Error(`B 站视频信息获取失败：${viewBody.message || viewBody.code}`);
   const data = viewBody.data || {};
-  const cid = data.cid || data.pages?.[0]?.cid;
+  const cid = data.cid ?? data.pages?.[0]?.cid;
   if (!cid) throw new Error("B 站这条内容没有可用的分P编号。");
 
   const playResponse = await fetchImpl(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=64&fnval=1&fnver=0&fourk=1`, {
     headers,
     signal: AbortSignal.timeout(timeoutMs)
   });
-  const playBody = await playResponse.json().catch(() => ({}));
+  const playBody = await playResponse.json().catch(() => ({})) as BilibiliPlayResponse;
   if (playBody.code !== 0) throw new Error(`B 站播放地址获取失败：${playBody.message || playBody.code}`);
   const direct = playBody.data?.durl?.[0]?.url;
   if (!direct) throw new Error("B 站没有返回可下载的播放地址（可能需要登录）。");
@@ -170,13 +157,35 @@ export async function resolveBilibiliVideo(value, options = {}) {
   return { url: direct, title: typeof data.title === "string" ? data.title : undefined, source: "bilibili", referer: "https://www.bilibili.com/" };
 }
 
+export function looksLikeBilibiliLink(value: string): boolean {
+  try {
+    return isBilibiliHost(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+// 从 B 站链接里提取 BV 号：/video/BVxxx 路径或 bvid= 参数都行。
+export function bilibiliBvid(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    const fromQuery = parsed.searchParams.get("bvid");
+    if (fromQuery && /^BV[0-9A-Za-z]{10,}$/.test(fromQuery)) return fromQuery;
+    const match = parsed.pathname.match(/(BV[0-9A-Za-z]{10,})/);
+    if (match) return match[1];
+  } catch {
+    // 交给外层报错
+  }
+  return null;
+}
+
 // 统一入口：能解析出真实可下载地址就返回它，否则原样返回让下载流程兜底。
-export async function resolveVideoUrl(value, options = {}) {
+export async function resolveVideoUrl(value: string, options: ResolveOptions = {}): Promise<ResolvedVideo> {
   if (looksLikeDouyinLink(value)) {
     try {
       return await resolveDouyinVideo(value, options);
     } catch (error) {
-      if (String(error?.message || "").startsWith("抖音")) throw error;
+      if (String(error instanceof Error ? error.message : "").startsWith("抖音")) throw error;
       return { url: value, source: "direct", title: undefined };
     }
   }
@@ -184,7 +193,8 @@ export async function resolveVideoUrl(value, options = {}) {
     try {
       return await resolveBilibiliVideo(value, options);
     } catch (error) {
-      if (String(error?.message || "").startsWith("B 站") || String(error?.message || "").includes("BV")) throw error;
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("B 站") || message.includes("BV")) throw error;
       return { url: value, source: "direct", title: undefined };
     }
   }
@@ -193,11 +203,11 @@ export async function resolveVideoUrl(value, options = {}) {
   return { url: value, source: "direct", title: undefined };
 }
 
-// yt-dlp 兜底：覆盖抖音之外的各大热门网站（B站、YouTube、小红书等）。
-export async function resolveWithYtDlp(value, options = {}) {
+// yt-dlp 兜底：覆盖抖音/B站之外的其他站点（YouTube、小红书、微博等）。
+export async function resolveWithYtDlp(value: string, options: ResolveOptions = {}): Promise<string | null> {
   const command = findYtDlpCommand();
   if (!command) return null;
-  const timeoutMs = options.ytdlpTimeoutMs || 90_000;
+  const timeoutMs = 90_000;
   const args = [
     ...command.args,
     "--no-playlist",
@@ -219,7 +229,12 @@ export async function resolveWithYtDlp(value, options = {}) {
   return null;
 }
 
-function findYtDlpCommand() {
+interface YtDlpCommand {
+  bin: string;
+  args: string[];
+}
+
+function findYtDlpCommand(): YtDlpCommand | null {
   if (process.env.YTDLP_PATH) return { bin: process.env.YTDLP_PATH, args: [] };
   const ytdlp = findOnPath("yt-dlp");
   if (ytdlp) return { bin: ytdlp, args: [] };
@@ -228,7 +243,7 @@ function findYtDlpCommand() {
   return null;
 }
 
-function findOnPath(name) {
+function findOnPath(name: string): string | null {
   try {
     const result = spawnSync("which", [name], { encoding: "utf8" });
     if (result.status !== 0) return null;
@@ -239,7 +254,7 @@ function findOnPath(name) {
   }
 }
 
-function runYtDlp(bin, args, timeoutMs) {
+function runYtDlp(bin: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
@@ -255,7 +270,20 @@ function runYtDlp(bin, args, timeoutMs) {
   });
 }
 
-function extractRouterData(html) {
+interface RouterData {
+  loaderData?: Record<string, { videoInfoRes?: { item_list?: Array<RouterItem> } }>;
+}
+
+interface RouterItem {
+  desc?: string;
+  video?: {
+    play_addr?: { url_list?: string[] };
+    bit_rate?: Array<{ play_addr?: { url_list?: string[] } }>;
+    download_addr?: { url_list?: string[] };
+  };
+}
+
+function extractRouterData(html: string): string | null {
   const marker = "window._ROUTER_DATA";
   const start = html.indexOf(marker);
   if (start < 0) return null;
@@ -284,7 +312,7 @@ function extractRouterData(html) {
   return null;
 }
 
-function findVideoInRouterData(data) {
+function findVideoInRouterData(data: RouterData): { url: string; title?: string } | null {
   const loader = data?.loaderData || {};
   for (const value of Object.values(loader)) {
     const item = value?.videoInfoRes?.item_list?.[0];
@@ -303,7 +331,7 @@ function findVideoInRouterData(data) {
   return null;
 }
 
-function extractOgVideo(html) {
+function extractOgVideo(html: string): string | null {
   const patterns = [
     /<meta[^>]+property=["']og:video["'][^>]+content=["']([^"']+)["']/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:video["']/i
@@ -313,4 +341,22 @@ function extractOgVideo(html) {
     if (match?.[1]) return match[1];
   }
   return null;
+}
+
+interface BilibiliViewResponse {
+  code: number;
+  message?: string;
+  data?: {
+    title?: string;
+    cid?: number;
+    pages?: Array<{ cid: number }>;
+  };
+}
+
+interface BilibiliPlayResponse {
+  code: number;
+  message?: string;
+  data?: {
+    durl?: Array<{ url: string }>;
+  };
 }

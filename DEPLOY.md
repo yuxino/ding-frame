@@ -66,7 +66,7 @@ nginx -t && systemctl reload nginx
 push 到 `main` 后 `Deploy and Restart ding-frame` 会自动：
 1. `npm ci` → `npm test` → `npm run build:client`
 2. SCP `dist/ src/ package.json package-lock.json` 到 `~/ding-frame`
-3. SSH：`npm ci --production` → 写 `.env`（从 secrets 生成，含 API Key）→ `pm2 reload ding-frame || pm2 start src/server/index.js --name ding-frame` → `pm2 save`
+3. SSH：`npm install --omit=dev` → 写 `.env`（从 secrets 生成，含 API Key）→ `pm2 reload ding-frame || pm2 start dist-server/index.js --name ding-frame` → `pm2 save`
 
 手动触发：Actions 页面 → Deploy and Restart ding-frame → Run workflow。
 

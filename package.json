@@ -5,13 +5,15 @@
   "type": "module",
   "description": "Ephemeral small-video analysis with frame extraction and ASR.",
   "scripts": {
-    "dev": "concurrently -k \"tsx watch src/server/index.js\" \"vite\"",
-    "build": "npm run build:client",
+    "dev": "concurrently -k \"tsx watch src/server/index.ts\" \"vite\"",
+    "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
-    "start": "node src/server/index.js",
+    "build:server": "tsc -p tsconfig.server.json",
+    "start": "node dist-server/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm test && npm run build"
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "check": "npm test && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@fastify/multipart": "^9.2.1",
@@ -24,9 +26,13 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.0.2",
     "concurrently": "^9.2.1",
     "tsx": "^4.20.3",
+    "typescript": "^5.9.3",
     "vite": "^7.1.2",
     "vitest": "^3.2.4"
   }
