@@ -8,7 +8,7 @@ const stageLabels = {
   extracting_frames: "抽取画面",
   extracting_audio: "整理声音",
   transcribing: "听写字幕",
-  interpreting: "整理线索",
+  interpreting: "生成总结",
   done: "分析完成",
   failed: "需要重试"
 };
@@ -27,6 +27,30 @@ function formatDate(timestamp) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(timestamp));
+}
+
+function Glyph({ name, size = 18 }) {
+  const icons = {
+    arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
+    clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></>,
+    frame: <><path d="M8 3H4a1 1 0 0 0-1 1v4" /><path d="M16 3h4a1 1 0 0 1 1 1v4" /><path d="M8 21H4a1 1 0 0 1-1-1v-4" /><path d="M16 21h4a1 1 0 0 0 1-1v-4" /></>,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></>,
+    link: <><path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15" /><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15" /></>,
+    play: <path d="m9 7 8 5-8 5Z" />,
+    spark: <><path d="m12 3 1.2 4.1a5 5 0 0 0 3.7 3.7L21 12l-4.1 1.2a5 5 0 0 0-3.7 3.7L12 21l-1.2-4.1a5 5 0 0 0-3.7-3.7L3 12l4.1-1.2a5 5 0 0 0 3.7-3.7Z" /></>,
+    trash: <><path d="M4 7h16" /><path d="m9 7 1-3h4l1 3" /><path d="m6 7 1 13h10l1-13" /><path d="M10 11v5M14 11v5" /></>,
+    upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4" /></>,
+    voice: <><path d="M9 5v14" /><path d="M5 9v6" /><path d="M13 8v8" /><path d="M17 6v12" /><path d="M21 10v4" /></>
+  };
+
+  return <svg className="glyph" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[name] || icons.frame}</svg>;
+}
+
+function Brand() {
+  return <div className="brand-lockup">
+    <img src="/ding-frame-icon-64.png" alt="" className="brand-icon" />
+    <div><strong>盯帧</strong><span>DINGFRAME</span></div>
+  </div>;
 }
 
 function App() {
@@ -107,53 +131,38 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="rail" aria-label="主导航">
-        <div>
-          <div className="brand-lockup">
-            <span className="brand-mark" aria-hidden="true">盯</span>
-            <div>
-              <div className="brand-name">盯帧</div>
-              <div className="brand-tagline">一眼盯帧，鉴定为真</div>
-            </div>
+      <header className="site-header">
+        <div className="header-inner">
+          <Brand />
+          <div className="header-actions">
+            <span className="privacy-pill"><i />20 分钟后自动消失</span>
+            <button className="header-button" type="button" onClick={() => setShowSettings(true)}><Glyph name="info" size={16} />使用说明</button>
           </div>
-          <nav className="rail-nav">
-            <button className="rail-button active" type="button">
-              <span className="rail-icon">⌁</span><span className="rail-label">开始分析</span>
-            </button>
-            <button className="rail-button" type="button" onClick={() => setShowSettings(true)}>
-              <span className="rail-icon">◌</span><span className="rail-label">使用说明</span>
-            </button>
-          </nav>
         </div>
-        <div className="rail-bottom">
-          <div className="streak-note"><span className="pulse-dot" /><span>结果会自行消失</span></div>
-          <button className="avatar-button" type="button" aria-label="关于盯帧" onClick={() => setShowSettings(true)}>G</button>
-        </div>
-      </aside>
+      </header>
 
       <main className="main-shell">
-        <header className="topbar">
-          <div className="crumbs"><span className="crumb-muted">小视频工作台</span><span className="crumb-slash">/</span><span>{hasResult ? "一次分析" : "新的分析"}</span></div>
-          <div className="topbar-actions">
-            <span className="preview-chip"><span className="preview-dot" />临时空间</span>
-            <button className="topbar-button" type="button" onClick={() => setShowSettings(true)}><span className="button-glyph">✦</span>阅后即焚</button>
-          </div>
-        </header>
-
         {!job && (
           <section className="landing-layout">
             <div className="hero-copy">
-              <div className="eyebrow">一眼盯帧 · 鉴定为真</div>
-              <h1>把一段小视频，<br /><em>拆成几处</em>值得记住的瞬间。</h1>
-              <p className="hero-deck">抽出画面，听见人声，再把它们排回时间线上。视频本体不进你的长期空间。</p>
-              <div className="hero-meta"><span>抽帧</span><i>·</i><span>ASR 听写</span><i>·</i><span>临时结果</span></div>
+              <div className="hero-badge"><span />小视频分析，不留库存</div>
+              <h1>一眼盯帧，<br />鉴定为真。</h1>
+              <p>放进一段小视频。盯帧会抽出关键画面、听写人声、标出重点，再给你一份能直接回看的总结。</p>
+              <div className="feature-row">
+                <div><Glyph name="frame" /><span><strong>抽关键帧</strong><small>看清发生了什么</small></span></div>
+                <div><Glyph name="voice" /><span><strong>分钟字幕</strong><small>听清说了什么</small></span></div>
+                <div><Glyph name="clock" /><span><strong>阅后即焚</strong><small>不占长期空间</small></span></div>
+              </div>
             </div>
 
             <form className="capture-card" onSubmit={startAnalysis}>
-              <div className="capture-card-head"><span className="card-kicker">放入一段视频</span><span className="card-hint">≤ 15 分钟</span></div>
+              <div className="capture-card-head">
+                <div><span>NEW ANALYSIS</span><h2>开始一次分析</h2></div>
+                <img src="/ding-frame-icon-64.png" alt="" />
+              </div>
               <div className="mode-switch" role="tablist" aria-label="视频来源">
-                <button className={mode === "upload" ? "selected" : ""} type="button" onClick={() => setMode("upload")}>本地视频</button>
-                <button className={mode === "url" ? "selected" : ""} type="button" onClick={() => setMode("url")}>视频地址</button>
+                <button className={mode === "upload" ? "selected" : ""} type="button" onClick={() => setMode("upload")}><Glyph name="upload" size={15} />本地视频</button>
+                <button className={mode === "url" ? "selected" : ""} type="button" onClick={() => setMode("url")}><Glyph name="link" size={15} />视频地址</button>
               </div>
               {mode === "upload" ? (
                 <div
@@ -166,18 +175,21 @@ function App() {
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click(); }}
                 >
                   <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event) => selectFile(event.target.files?.[0])} />
-                  <div className="drop-orbit"><span>↥</span></div>
+                  <span className="drop-icon"><Glyph name="upload" size={22} /></span>
                   <strong>{file ? file.name : "拖进来，或点这里选择"}</strong>
-                  <span>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · 等待分析` : "视频只会暂存在分析期间"}</span>
+                  <small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · 已准备好` : "MP4、MOV、WebM · 最长 15 分钟"}</small>
                 </div>
               ) : (
                 <label className="url-field">
-                  <span>公开的视频 URL</span>
+                  <span><Glyph name="link" size={16} />公开的视频地址</span>
                   <input type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://… 或 //www.douyin.com/…" />
-                  <small>支持完整链接、// 开头或省略协议的视频地址</small>
+                  <small>支持完整链接、// 开头或省略协议的地址</small>
                 </label>
               )}
-              <div className="capture-foot"><span><span className="tiny-star">✦</span>结果到期后自动清除视频与分析文件</span><button className="primary-button" type="submit" disabled={busy}>{busy ? "正在放入…" : "开始拆解"}<span>→</span></button></div>
+              <div className="capture-foot">
+                <span><i />仅在分析期间暂存</span>
+                <button className="primary-button" type="submit" disabled={busy}>{busy ? "正在放入…" : "开始分析"}<Glyph name="arrow" size={17} /></button>
+              </div>
               {error && <p className="form-error" role="alert">{error}</p>}
             </form>
           </section>
@@ -195,14 +207,19 @@ function App() {
 function ProgressView({ job, progress, error, onClear }) {
   return (
     <section className="progress-layout">
-      <div className="progress-intro"><div className="eyebrow">正在理解 · {job.source === "url" ? "视频地址" : "本地视频"}</div><h1>先把声音和画面，<em>分开听一遍。</em></h1><p>分析会在临时空间完成。你可以离开页面，回来后这次结果仍会在短时间内等你。</p><button className="quiet-button" type="button" onClick={onClear}>取消并清除</button></div>
+      <div className="progress-copy">
+        <span className="page-label">ANALYZING · {job.source === "url" ? "REMOTE VIDEO" : "LOCAL VIDEO"}</span>
+        <h1>正在把视频<br />盯明白。</h1>
+        <p>声音、画面和时间线正在临时空间里汇合。完成后会自动整理成可以点着回看的结果。</p>
+      </div>
       <div className="progress-card">
-        <div className="progress-orbit"><span /><i /><b /></div>
+        <div className="progress-mascot"><img src="/ding-frame-icon.png" alt="" /></div>
         <div className="progress-status"><span>{stageLabels[job.progress?.stage] || "处理中"}</span><strong>{progress}%</strong></div>
         <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
         <p>{job.progress?.detail || "正在准备…"}</p>
         {error && <div className="inline-error">{error}</div>}
-        <div className="process-list"><div className="process-done">① 视频已放入临时空间</div><div className={progress >= 35 ? "process-done" : "process-current"}>② {stageLabels[job.progress?.stage] || "分析处理中"}</div><div className={progress >= 100 ? "process-done" : "process-waiting"}>③ 整理成可读的时间线</div></div>
+        <div className="process-list"><span className="done">视频已进入临时空间</span><span className={progress >= 35 ? "done" : "current"}>声音与画面分析</span><span className={progress >= 100 ? "done" : "waiting"}>生成可读结果</span></div>
+        <button className="text-button" type="button" onClick={onClear}>取消并清除</button>
       </div>
     </section>
   );
@@ -249,31 +266,45 @@ function ResultView({ job, onClear }) {
   return (
     <section className="result-layout">
       <div className="result-main">
-        <div className="result-heading"><div><div className="eyebrow">分析完成 · {formatDate(job.createdAt)}</div><h1>{result.title || "这段视频，留下了什么？"}</h1><div className="summary-block"><span>AI 视频总结</span><p className="result-deck">{result.summary}</p></div></div><button className="quiet-button danger" type="button" onClick={onClear}>立即清除</button></div>
-        <div className="stat-row"><div><span>视频时长</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>抽取画面</span><strong>{result.frames.length} 帧</strong></div><div><span>字幕分钟</span><strong>{transcriptMinutes.length} 格</strong></div><div className="expiry-stat"><span>自动消失</span><strong>{countdown}</strong></div></div>
-        <div className="tag-panel">
-          <div className="tag-panel-copy"><span className="section-kicker">内容标记</span><p>主体、场景、动作和气氛；点标签就去它第一次出现的地方。</p></div>
-          <div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div>
+        <div className="result-heading">
+          <div className="result-title"><span className="page-label">分析完成 · {formatDate(job.createdAt)}</span><h1>{result.title || "这段视频，留下了什么？"}</h1></div>
+          <button className="clear-button" type="button" onClick={onClear}><Glyph name="trash" size={16} />清除本次</button>
         </div>
+
+        <div className="summary-block"><span><Glyph name="spark" size={15} />AI 视频总结</span><p>{result.summary}</p></div>
+
+        <div className="stat-row"><div><span>视频时长</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>关键画面</span><strong>{result.frames.length}</strong></div><div><span>字幕分钟</span><strong>{transcriptMinutes.length}</strong></div><div><span>自动清除</span><strong className="countdown">{countdown}</strong></div></div>
+
+        <section className="tag-panel">
+          <div className="section-heading"><span>内容标签</span><small>点击跳到首次出现的位置</small></div>
+          <div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div>
+        </section>
+
         <div className="video-stage">
           <video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>你的浏览器暂时无法播放这段视频。</video>
           <div className="video-stage-caption"><span>{selected?.caption || "正在回看视频"}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div>
         </div>
+
         <div className="frame-strip" aria-label="关键帧时间线">{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`跳到 ${formatTime(frame.atMs)}：${frame.caption || "关键帧"}`} className={index === selectedFrame ? "active" : ""} onClick={() => syncToTime(frame.atMs)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
-        <div className="highlights"><div className="section-kicker">值得回看的几个瞬间</div>{result.highlights.map((highlight) => <button type="button" className="highlight" key={`${highlight.atMs}-${highlight.title}`} onClick={() => syncToTime(highlight.atMs)}><div className="highlight-time"><span>▶</span>{formatTime(highlight.atMs)}</div><div><h3>{highlight.title}</h3><p>{highlight.detail}</p></div></button>)}</div>
+
+        <section className="highlights">
+          <div className="section-heading"><span>值得回看的瞬间</span><small>{result.highlights.length} 个重点</small></div>
+          {result.highlights.map((highlight) => <button type="button" className="highlight" key={`${highlight.atMs}-${highlight.title}`} onClick={() => syncToTime(highlight.atMs)}><span className="highlight-time"><Glyph name="play" size={13} />{formatTime(highlight.atMs)}</span><span><strong>{highlight.title}</strong><p>{highlight.detail}</p></span><Glyph name="arrow" size={18} /></button>)}
+        </section>
       </div>
+
       <aside className="transcript-panel">
-        <div className="panel-heading"><div><span className="panel-kicker">分钟字幕</span><h2>一分一格，点时回看</h2></div><span className="live-dot" /></div>
+        <div className="panel-heading"><div><span className="page-label">MINUTE CAPTIONS</span><h2>分钟字幕</h2><p>每分钟一格，点击直接回看。</p></div><span className="live-dot" /></div>
         <div className="transcript-list">
           {transcriptMinutes.length ? transcriptMinutes.map((group) => {
             const active = group.minute === activeMinute;
             return <button type="button" className={`transcript-minute ${active ? "active" : ""}`} aria-pressed={active} key={group.minute} onClick={() => syncToTime(group.startMs)}>
-              <span className="minute-rail"><strong>{String(group.minute + 1).padStart(2, "0")}′</strong><i>{formatTime(group.startMs)}—{formatTime(group.endMs)}</i></span>
-              <span className="minute-subtitle"><small><b />{group.speakerLabel}</small><p>{group.text}</p><em>▶ 从 {formatTime(group.startMs)} 播放</em></span>
+              <span className="minute-rail"><strong>{String(group.minute + 1).padStart(2, "0")}</strong><i>{formatTime(group.startMs)}—{formatTime(group.endMs)}</i></span>
+              <span className="minute-subtitle"><small><i />{group.speakerLabel}</small><p>{group.text}</p><em><Glyph name="play" size={11} />从 {formatTime(group.startMs)} 播放</em></span>
             </button>;
           }) : <div className="transcript-empty">这段视频没有识别到可用人声。</div>}
         </div>
-        <div className="panel-note"><span className="tiny-star">✦</span>视频、抽帧和结果还会停留 {Math.ceil(remaining / 60000)} 分钟<br />到时一起离开。</div>
+        <div className="panel-note"><Glyph name="clock" size={14} />剩余 {Math.ceil(remaining / 60000)} 分钟，到时自动清除</div>
       </aside>
     </section>
   );
@@ -289,7 +320,7 @@ function frameIndexAtTime(frames, atMs) {
 }
 
 function InfoModal({ onClose }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><span className="panel-kicker">盯帧 · 小说明</span><h2 id="info-title">让视频停在临时空间里。</h2><p>本地视频会上传到服务端临时目录，视频地址会被服务端短暂取回。分析结束后只保留回看需要的视频、抽帧和文本，倒计时结束或手动清除时一起删除；中间音频会在分析后立即删除。</p><p className="modal-muted">没有配置模型密钥时，项目会用演示数据跑完整流程。配置百炼通用 API Key 后，千问 ASR 与视觉模型会直接理解声音和画面，全程不需要 Bucket。</p><button className="primary-button" type="button" onClick={onClose}>知道了 <span>→</span></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><img src="/ding-frame-icon-64.png" alt="" /><span className="page-label">ABOUT DINGFRAME</span><h2 id="info-title">只留下看懂的结果。</h2><p>视频会暂存在服务端，用来抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起消失。</p><p className="modal-muted">无需 Bucket。配置百炼 API Key 后即可使用真实 ASR 与视觉分析；没有配置时会用演示数据跑完整流程。</p><button className="primary-button" type="button" onClick={onClose}>知道了<Glyph name="arrow" size={17} /></button></div></div>;
 }
 
 export default App;
