@@ -96,7 +96,7 @@ h1 em { color: var(--moss-deep); font-style: normal; }
 .progress-track { height: 2px; overflow: hidden; background: rgba(83,100,84,.14); }.progress-track > span { display: block; height: 100%; background: var(--moss); transition: width 400ms ease; }
 .progress-card > p { margin: 13px 0 30px; color: var(--ink-faint); font-size: 10px; }
 .process-list { display: grid; gap: 10px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 10px; }.process-done { color: var(--moss); }.process-current { color: var(--rust); }.process-waiting { opacity: .7; }
-.result-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); min-height: calc(100vh - 76px); }
+.result-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(350px, 420px); min-height: calc(100vh - 76px); }
 .result-main { max-width: 1020px; width: 100%; margin: 0 auto; padding: 58px clamp(24px, 5.5vw, 82px) 76px; }
 .result-heading { align-items: flex-start; margin-bottom: 34px; }
 .result-heading > div { min-width: 0; }
@@ -136,15 +136,15 @@ h1 em { color: var(--moss-deep); font-style: normal; }
 .highlight h3 { margin-bottom: 6px; color: var(--moss-deep); font-family: var(--serif); font-size: 20px; font-weight: 400; }
 .highlight p { margin: 0; color: var(--ink-soft); font-family: var(--serif); font-size: 14px; line-height: 1.7; }
 .transcript-panel { position: sticky; top: 0; display: flex; flex-direction: column; height: calc(100vh - 76px); border-left: 1px solid var(--line); background: rgba(250,248,242,.54); }
-.panel-heading { align-items: flex-start; padding: 41px 35px 26px; border-bottom: 1px solid var(--line); }
+.panel-heading { align-items: flex-start; padding: 43px 38px 30px; border-bottom: 1px solid var(--line); }
 .panel-heading h2 { margin: 10px 0 0; color: var(--ink); font-family: var(--serif); font-size: 25px; font-weight: 400; }
 .live-dot { width: 6px; height: 6px; margin-top: 5px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 0 4px rgba(83,100,84,.1); }
-.transcript-list { flex: 1; overflow: auto; padding: 12px 23px; }
-.transcript-line { display: grid; grid-template-columns: 58px 1fr; gap: 9px; width: 100%; padding: 14px 11px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); background: transparent; text-align: left; transition: color 160ms ease, background 160ms ease; }
-.transcript-line:hover, .transcript-line.active { color: var(--moss-deep); background: rgba(228,233,223,.52); }
-.transcript-line.active { box-shadow: inset 2px 0 var(--rust); }
-.transcript-line > span { color: var(--rust); font-size: 9px; padding-top: 2px; }
-.transcript-line p { margin: 0; font-family: var(--serif); font-size: 14px; line-height: 1.6; }
+.transcript-list { flex: 1; overflow: auto; padding: 21px 22px; }
+.transcript-line { display: grid; grid-template-columns: 64px 1fr; gap: 15px; width: 100%; margin-bottom: 13px; padding: 19px 17px; border: 1px solid var(--line); border-radius: 13px; color: var(--ink-soft); background: rgba(251,250,246,.42); text-align: left; box-shadow: 0 9px 24px rgba(48,45,35,.025); transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease; }
+.transcript-line:hover, .transcript-line.active { color: var(--moss-deep); border-color: rgba(83,100,84,.27); background: rgba(244,247,239,.82); transform: translateY(-1px); }
+.transcript-line.active { border-left-color: var(--rust); box-shadow: inset 2px 0 var(--rust), 0 11px 26px rgba(48,45,35,.035); }
+.transcript-line > span { color: var(--rust); font-size: 9px; padding-top: 4px; white-space: nowrap; }
+.transcript-line p { margin: 0; font-family: var(--serif); font-size: 15px; line-height: 1.78; }
 .transcript-empty { padding: 38px 12px; color: var(--ink-faint); font-family: var(--serif); font-size: 14px; line-height: 1.7; text-align: center; }
 .panel-note { padding: 20px 25px 24px; color: var(--ink-faint); font-size: 9px; line-height: 1.7; text-align: center; }
 .modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(52,71,58,.18); backdrop-filter: blur(4px); }

@@ -75,9 +75,17 @@ export async function requestTranscriptSegment({
   }
 
   const content = body.choices?.[0]?.message?.content;
-  const text = (typeof content === "string"
+  const text = compactTranscriptText(typeof content === "string"
     ? content
-    : content?.map((item) => item?.text || "").join(" ") || "").trim();
+    : content?.map((item) => item?.text || "").join(" ") || "");
   if (!text) return null;
   return { startMs: segment.startMs, endMs: segment.endMs, text };
+}
+
+export function compactTranscriptText(value) {
+  return (typeof value === "string" ? value : "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/([啊哦嗯哈诶哎呃唉喔噢呀嘿])\1{2,}/gu, "$1…")
+    .replace(/([！!?？。])\1{2,}/gu, "$1");
 }

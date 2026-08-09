@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { requestTranscriptSegment } from "./asr.js";
+import { compactTranscriptText, requestTranscriptSegment } from "./asr.js";
 
 const tempDirs = [];
 
@@ -11,6 +11,10 @@ afterEach(async () => {
 });
 
 describe("Qwen3 ASR Base64 adapter", () => {
+  it("compacts repeated filler sounds before displaying them", () => {
+    expect(compactTranscriptText("  哦哦哦哦哦哦   哎哎哎！！！继续说话。  ")).toBe("哦… 哎…！继续说话。");
+  });
+
   it("sends an MP3 data URI and keeps the segment timeline", async () => {
     const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-asr-test-"));
     tempDirs.push(dir);
