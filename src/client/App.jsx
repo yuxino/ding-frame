@@ -54,7 +54,7 @@ function Brand() {
 }
 
 function App() {
-  const [mode, setMode] = useState("upload");
+  const [mode, setMode] = useState("url");
   const [file, setFile] = useState(null);
   const [url, setUrl] = useState("");
   const [job, setJob] = useState(null);
