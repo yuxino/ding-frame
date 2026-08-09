@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { config } from "./config.js";
 import { analyze } from "./analysis.js";
 import { transcribe, transcribeFullAudio } from "./asr.js";
+import { downloadUrl } from "./download.js";
 import { updateJob } from "./jobs.js";
+import { resolveVideoUrl } from "./resolver.js";
 import { extractAudioSegments, extractFrames, inspectVideo } from "./video.js";
 
 export function enqueueAnalysis(job) {
@@ -48,12 +50,25 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onPr
 }
 
 async function runAnalysis(job) {
-  const inputPath = job.inputPath;
   const framesDir = join(job.dir, "frames");
   const audioDir = join(job.dir, "audio");
   let completed = false;
   try {
     updateJob(job, { status: "processing" });
+    let inputPath = job.inputPath;
+    if (job.sourceUrl) {
+      // 视频地址任务：在后台解析真实地址并下载，全程回报进度，提交接口不再阻塞
+      const resolved = await resolveVideoUrl(job.sourceUrl);
+      if (resolved.title) updateJob(job, { title: resolved.title });
+      updateJob(job, { progress: { stage: "downloading", percent: 8, detail: "正在把视频放入临时空间。" } });
+      inputPath = join(job.dir, "input.mp4");
+      job.inputPath = inputPath;
+      const download = await downloadUrl(resolved.url, inputPath, {
+        referer: resolved.referer,
+        onProgress: (percent, detail) => updateJob(job, { progress: { stage: "downloading", percent, detail } })
+      });
+      job.inputMimeType = download.contentType;
+    }
     const result = await analyzeMedia({
       inputPath,
       title: job.title,

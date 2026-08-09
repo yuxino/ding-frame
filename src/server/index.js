@@ -1,9 +1,7 @@
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { isIP } from "node:net";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
@@ -11,10 +9,10 @@ import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
 import { getTempAudio } from "./temp-audio.js";
 import { enqueueAnalysis } from "./pipeline.js";
-import { extractUrlFromText, resolveVideoUrl } from "./resolver.js";
-import { headersForVideoUrl, normalizeVideoUrl } from "./url-source.js";
+import { streamToFile } from "./download.js";
+import { extractUrlFromText } from "./resolver.js";
+import { normalizeVideoUrl } from "./url-source.js";
 import { parseByteRange } from "./video-stream.js";
-import { inspectVideo } from "./video.js";
 
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
@@ -48,13 +46,9 @@ app.post("/api/analyze/url", async (request, reply) => {
     const url = normalizeVideoUrl(extractUrlFromText(rawUrl) || (typeof rawUrl === "string" ? rawUrl.trim() : ""));
     validateVideoUrl(url);
     job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址" });
+    job.sourceUrl = url;
     updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
-    const resolved = await resolveVideoUrl(url);
-    if (resolved.title) updateJob(job, { title: resolved.title });
-    const inputPath = join(job.dir, "input.mp4");
-    job.inputPath = inputPath;
-    const download = await downloadUrl(resolved.url, inputPath, job, { referer: resolved.referer });
-    job.inputMimeType = download.contentType;
+    // 解析与下载放进后台任务，立即返回任务编号，前端马上进入进度页
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
@@ -149,40 +143,6 @@ try {
 }
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
-
-async function streamToFile(readable, outputPath, maxBytes) {
-  let bytes = 0;
-  const counter = new Transform({ transform(chunk, encoding, callback) { bytes += chunk.length; if (bytes > maxBytes) return callback(new Error(`视频太大了，第一版最多支持 ${Math.round(maxBytes / 1024 / 1024)} MB。`)); callback(null, chunk); } });
-  await pipeline(readable, counter, createWriteStream(outputPath));
-  return bytes;
-}
-
-async function downloadUrl(url, outputPath, job, { referer } = {}) {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await rm(outputPath, { force: true });
-      const response = await fetch(url, { redirect: "follow", headers: { ...headersForVideoUrl(url), ...(referer ? { referer } : {}), "accept-encoding": "identity" }, signal: AbortSignal.timeout(60_000) });
-      if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，没有解析出可下载的视频文件。抖音分享链接可能被风控或是图文笔记，也可以换成视频直链试试。");
-      const contentLength = Number(response.headers.get("content-length") || 0);
-      if (contentLength > config.maxUploadBytes) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
-      const stream = Readable.fromWeb(response.body);
-      const bytes = await streamToFile(stream, outputPath, config.maxUploadBytes);
-      if (!bytes) throw new Error("视频下载结果为空。");
-      if (contentLength && bytes !== contentLength) throw new Error(`视频下载不完整（收到 ${bytes} / ${contentLength} 字节）。`);
-      await inspectVideo(outputPath);
-      updateJob(job, { progress: { stage: "inspecting", percent: 12, detail: "视频已进入临时空间。" } });
-      return { contentType };
-    } catch (error) {
-      lastError = error;
-      if (error.message.startsWith("视频太长") || error.message.includes("不是可直接下载的视频")) throw error;
-      if (attempt < 3) updateJob(job, { progress: { stage: "downloading", percent: 8, detail: `视频没有完整到达，正在重新取回（${attempt}/3）。` } });
-    }
-  }
-  throw new Error(`视频下载不完整，已自动重试 3 次。${lastError ? ` ${lastError.message}` : ""}`);
-}
 
 function validateVideoUrl(value) {
   if (typeof value !== "string" || !value.trim()) throw new Error("请输入视频地址。");
