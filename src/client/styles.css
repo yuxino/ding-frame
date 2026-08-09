@@ -45,6 +45,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .hero-badge { display: inline-flex; align-items: center; gap: 9px; margin-bottom: 28px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); background: rgba(255,255,255,.55); font-size: 10px; font-weight: 650; letter-spacing: .03em; }
 .hero-badge span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: inset 0 0 0 1px rgba(16,17,15,.16); }
 .hero-copy h1, .progress-copy h1, .result-heading h1 { margin: 0; font-size: clamp(58px, 7.2vw, 104px); font-weight: 780; letter-spacing: -.075em; line-height: .94; text-wrap: balance; }
+.slogan-verdict { position: relative; z-index: 0; display: inline-block; }
+.slogan-verdict::after { content: ""; position: absolute; z-index: -1; right: -.02em; bottom: .04em; left: .02em; height: .11em; border-radius: 999px; background: var(--accent); }
 .hero-copy > p { max-width: 600px; margin: 30px 0 34px; color: var(--ink-2); font-size: clamp(16px, 1.55vw, 20px); line-height: 1.72; }
 .feature-row { display: flex; flex-wrap: wrap; gap: 24px; padding-top: 28px; border-top: 1px solid var(--line); }
 .feature-row > div { display: flex; min-width: 138px; align-items: flex-start; gap: 10px; }
