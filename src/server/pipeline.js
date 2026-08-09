@@ -53,9 +53,9 @@ async function runAnalysis(job) {
   const framesDir = join(job.dir, "frames");
   const audioDir = join(job.dir, "audio");
   let completed = false;
+  let inputPath = job.inputPath;
   try {
     updateJob(job, { status: "processing" });
-    let inputPath = job.inputPath;
     if (job.sourceUrl) {
       // 视频地址任务：在后台解析真实地址并下载，全程回报进度，提交接口不再阻塞
       const resolved = await resolveVideoUrl(job.sourceUrl);
