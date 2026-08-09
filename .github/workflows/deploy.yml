@@ -74,11 +74,12 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
+          timeout: 30m
           envs: APP_PORT,ASR_PROVIDER,DASHSCOPE_API_KEY,ASR_MODEL,ANALYSIS_PROVIDER,VISION_MODEL,PUBLIC_BASE_URL
           script: |
             set -e
             cd ${{ steps.deploy-meta.outputs.deploy_target }}
-            npm ci --production
+            npm install --omit=dev --no-audit --no-fund --prefer-offline
             cat > .env <<EOF
             PORT=${APP_PORT}
             ASR_PROVIDER=${ASR_PROVIDER}
