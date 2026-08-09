@@ -10,6 +10,7 @@ import fastifyStatic from "@fastify/static";
 import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
 import { enqueueAnalysis } from "./pipeline.js";
+import { extractUrlFromText, resolveVideoUrl } from "./resolver.js";
 import { headersForVideoUrl, normalizeVideoUrl } from "./url-source.js";
 import { parseByteRange } from "./video-stream.js";
 import { inspectVideo } from "./video.js";
@@ -42,13 +43,16 @@ app.post("/api/analyze/upload", async (request, reply) => {
 app.post("/api/analyze/url", async (request, reply) => {
   let job;
   try {
-    const url = normalizeVideoUrl(request.body?.url);
+    const rawUrl = request.body?.url;
+    const url = normalizeVideoUrl(extractUrlFromText(rawUrl) || (typeof rawUrl === "string" ? rawUrl.trim() : ""));
     validateVideoUrl(url);
     job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址" });
-    updateJob(job, { progress: { stage: "downloading", percent: 8, detail: "正在把视频放入临时空间。" } });
+    updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
+    const resolved = await resolveVideoUrl(url);
+    if (resolved.title) updateJob(job, { title: resolved.title });
     const inputPath = join(job.dir, "input.mp4");
     job.inputPath = inputPath;
-    const download = await downloadUrl(url, inputPath, job);
+    const download = await downloadUrl(resolved.url, inputPath, job);
     job.inputMimeType = download.contentType;
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
@@ -144,7 +148,7 @@ async function downloadUrl(url, outputPath, job) {
       const response = await fetch(url, { redirect: "follow", headers: { ...headersForVideoUrl(url), "accept-encoding": "identity" }, signal: AbortSignal.timeout(60_000) });
       if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
       const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，不是可直接下载的视频文件。");
+      if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，没有解析出可下载的视频文件。抖音分享链接可能被风控或是图文笔记，也可以换成视频直链试试。");
       const contentLength = Number(response.headers.get("content-length") || 0);
       if (contentLength > config.maxUploadBytes) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
       const stream = Readable.fromWeb(response.body);

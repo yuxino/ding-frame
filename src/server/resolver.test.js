@@ -1,0 +1,155 @@
+import { describe, expect, it } from "vitest";
+import {
+  deWatermark,
+  extractUrlFromText,
+  looksLikeDouyinLink,
+  parseDouyinPage,
+  resolveDouyinVideo
+} from "./resolver.js";
+
+describe("extractUrlFromText", () => {
+  it("pulls the first URL out of Douyin share copy text", () => {
+    const text = "8.88 复制打开抖音，看看【作者的作品】 https://v.douyin.com/_2ljF4AmKL8/ 复制此链接，打开Dou音搜索";
+    expect(extractUrlFromText(text)).toBe("https://v.douyin.com/_2ljF4AmKL8/");
+  });
+
+  it("strips trailing punctuation after a URL", () => {
+    expect(extractUrlFromText("看这个 https://v.douyin.com/abc/！")).toBe("https://v.douyin.com/abc/");
+    expect(extractUrlFromText("（https://v.douyin.com/abc/）")).toBe("https://v.douyin.com/abc/");
+  });
+
+  it("returns empty when there is no URL", () => {
+    expect(extractUrlFromText("没有链接")).toBe("");
+    expect(extractUrlFromText(undefined)).toBe("");
+    expect(extractUrlFromText(123)).toBe("");
+  });
+});
+
+describe("deWatermark", () => {
+  it("replaces playwm with play to remove the watermark", () => {
+    const url = "https://aweme.snssdk.com/aweme/v1/playwm/?video_id=abc&ratio=720p";
+    expect(deWatermark(url)).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=abc&ratio=720p");
+  });
+
+  it("leaves non-playwm URLs untouched", () => {
+    const url = "https://cdn.example.com/video.mp4";
+    expect(deWatermark(url)).toBe(url);
+  });
+});
+
+describe("looksLikeDouyinLink", () => {
+  it("recognizes short links and share pages", () => {
+    expect(looksLikeDouyinLink("https://v.douyin.com/abc/")).toBe(true);
+    expect(looksLikeDouyinLink("https://www.iesdouyin.com/share/video/123")).toBe(true);
+    expect(looksLikeDouyinLink("https://www.douyin.com/video/123")).toBe(true);
+  });
+
+  it("rejects other hosts", () => {
+    expect(looksLikeDouyinLink("https://www.bilibili.com/video/BV1xx")).toBe(false);
+    expect(looksLikeDouyinLink("not a url")).toBe(false);
+  });
+});
+
+describe("parseDouyinPage", () => {
+  const routerJson = JSON.stringify({
+    loaderData: {
+      "video_(id)/page": {
+        videoInfoRes: {
+          item_list: [
+            {
+              desc: "一段测试视频",
+              video: {
+                play_addr: {
+                  url_list: ["https://aweme.snssdk.com/aweme/v1/playwm/?video_id=v1&ratio=720p&line=0"]
+                },
+                bit_rate: []
+              }
+            }
+          ]
+        }
+      }
+    }
+  });
+
+  it("extracts the no-watermark play URL and title from _ROUTER_DATA", () => {
+    const html = `<html><head></head><body><script>window._ROUTER_DATA = ${routerJson}</script></body></html>`;
+    const parsed = parseDouyinPage(html);
+    expect(parsed).not.toBeNull();
+    expect(parsed.url).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=v1&ratio=720p&line=0");
+    expect(parsed.title).toBe("一段测试视频");
+  });
+
+  it("falls back to the og:video meta tag", () => {
+    const html = '<meta property="og:video" content="https://aweme.snssdk.com/aweme/v1/playwm/?video_id=og1" />';
+    expect(parseDouyinPage(html).url).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=og1");
+  });
+
+  it("returns null when no video is present", () => {
+    expect(parseDouyinPage("<html>nothing here</html>")).toBeNull();
+  });
+});
+
+describe("resolveDouyinVideo", () => {
+  it("follows redirects and resolves the real video URL", async () => {
+    const routerJson = JSON.stringify({
+      loaderData: {
+        "video_(id)/page": {
+          videoInfoRes: {
+            item_list: [
+              {
+                desc: "标题",
+                video: {
+                  play_addr: {
+                    url_list: ["https://aweme.snssdk.com/aweme/v1/playwm/?video_id=v1"]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    });
+    const fetchImpl = async (url, init) => {
+      if (url === "https://v.douyin.com/abc/") {
+        return {
+          ok: true,
+          status: 302,
+          headers: new Headers({ location: "https://www.iesdouyin.com/share/video/123" }),
+          text: async () => ""
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+        text: async () => `<script>window._ROUTER_DATA = ${routerJson}</script>`
+      };
+    };
+    const resolved = await resolveDouyinVideo("https://v.douyin.com/abc/", { fetchImpl });
+    expect(resolved.url).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=v1");
+    expect(resolved.title).toBe("标题");
+    expect(resolved.source).toBe("douyin");
+  });
+
+  it("returns the URL directly when the response is already media", async () => {
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "video/mp4" }),
+      text: async () => "binary"
+    });
+    const resolved = await resolveDouyinVideo("https://v3-web.douyinvod.com/video.mp4", { fetchImpl });
+    expect(resolved.url).toBe("https://v3-web.douyinvod.com/video.mp4");
+  });
+
+  it("throws a readable error when the page has no video", async () => {
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "text/html" }),
+      text: async () => "<html>no data</html>"
+    });
+    await expect(resolveDouyinVideo("https://www.douyin.com/note/123", { fetchImpl }))
+      .rejects.toThrow(/图文笔记|已删除|登录/);
+  });
+});

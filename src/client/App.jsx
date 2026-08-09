@@ -3,6 +3,7 @@ import { groupTranscriptByMinute } from "./transcript.js";
 
 const stageLabels = {
   queued: "排队中",
+  resolving: "解析链接",
   downloading: "取回视频",
   inspecting: "读取视频",
   extracting_frames: "抽取画面",
@@ -182,8 +183,8 @@ function App() {
               ) : (
                 <label className="url-field">
                   <span><Glyph name="link" size={16} />公开的视频地址</span>
-                  <input type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://… 或 //www.douyin.com/…" />
-                  <small>支持完整链接、// 开头或省略协议的地址</small>
+                  <input type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://v.douyin.com/… 或视频直链" />
+                  <small>支持抖音分享链接、整段分享文案、B站/YouTube 等公开链接与视频直链</small>
                 </label>
               )}
               <div className="capture-foot">

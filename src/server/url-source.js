@@ -1,5 +1,7 @@
 const browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
 
+const DOUYIN_HOST_SUFFIXES = ["douyin.com", "douyinvod.com", "iesdouyin.com", "snssdk.com", "amemv.com"];
+
 export function normalizeVideoUrl(value) {
   if (typeof value !== "string") return value;
   const normalized = value.trim();
@@ -26,5 +28,7 @@ export function headersForVideoUrl(value) {
 
 export function isDouyinHost(hostname) {
   const normalized = hostname.toLowerCase();
-  return normalized === "douyin.com" || normalized.endsWith(".douyin.com") || normalized === "douyinvod.com" || normalized.endsWith(".douyinvod.com");
+  return DOUYIN_HOST_SUFFIXES.some(
+    (suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`)
+  );
 }
