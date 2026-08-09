@@ -214,7 +214,7 @@ function App() {
           <section className="landing-layout">
             <div className="hero-copy">
               <div className="hero-badge"><span />小视频分析，不留库存</div>
-              <h1>把一段小视频，<br />拆成几处<br /><span className="slogan-verdict">值得记住的瞬间。</span></h1>
+              <h1>看视频，<br /><span className="slogan-verdict">直接看重点。</span></h1>
               <p>放进一段小视频。盯帧会抽出关键画面、听写人声、标出重点，再给你一份能直接回看的总结。</p>
               <div className="feature-row">
                 <div><Glyph name="frame" /><span><strong>抽关键帧</strong><small>看清发生了什么</small></span></div>
