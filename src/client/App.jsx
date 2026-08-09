@@ -40,7 +40,8 @@ function Glyph({ name, size = 18 }) {
     spark: <><path d="m12 3 1.2 4.1a5 5 0 0 0 3.7 3.7L21 12l-4.1 1.2a5 5 0 0 0-3.7 3.7L12 21l-1.2-4.1a5 5 0 0 0-3.7-3.7L3 12l4.1-1.2a5 5 0 0 0 3.7-3.7Z" /></>,
     trash: <><path d="M4 7h16" /><path d="m9 7 1-3h4l1 3" /><path d="m6 7 1 13h10l1-13" /><path d="M10 11v5M14 11v5" /></>,
     upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4" /></>,
-    voice: <><path d="M9 5v14" /><path d="M5 9v6" /><path d="M13 8v8" /><path d="M17 6v12" /><path d="M21 10v4" /></>
+    voice: <><path d="M9 5v14" /><path d="M5 9v6" /><path d="M13 8v8" /><path d="M17 6v12" /><path d="M21 10v4" /></>,
+    cc: <><rect x="2" y="6" width="20" height="12" rx="2.5" /><path d="M8.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /><path d="M15.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /></>
   };
 
   return <svg className="glyph" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[name] || icons.frame}</svg>;
@@ -252,6 +253,7 @@ function ResultView({ job, onClear }) {
   const result = job.result;
   const [selectedFrame, setSelectedFrame] = useState(0);
   const [currentMs, setCurrentMs] = useState(0);
+  const [showSubtitles, setShowSubtitles] = useState(true);
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -260,6 +262,9 @@ function ResultView({ job, onClear }) {
   }, [job.expiresAt]);
 
   const selected = result.frames[selectedFrame] || result.frames[0];
+  const activeSubtitle = showSubtitles
+    ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs)
+    : null;
   const countdown = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
   const activeMinute = Math.floor(currentMs / 60000);
 
@@ -302,7 +307,18 @@ function ResultView({ job, onClear }) {
         </section>
 
         <div className="video-stage">
-          <video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>你的浏览器暂时无法播放这段视频。</video>
+          <div className="video-stage-player">
+            <video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>你的浏览器暂时无法播放这段视频。</video>
+            {activeSubtitle && (
+              <div className="video-subtitle">
+                {activeSubtitle.speaker !== undefined && activeSubtitle.speaker !== null && String(activeSubtitle.speaker).trim() ? <span>说话人 {activeSubtitle.speaker}</span> : null}
+                <p>{activeSubtitle.text}</p>
+              </div>
+            )}
+            <button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? "关闭字幕" : "开启字幕"}>
+              <Glyph name="cc" size={13} />字幕
+            </button>
+          </div>
           <div className="video-stage-caption"><span>{selected?.caption || "正在回看视频"}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div>
         </div>
 
