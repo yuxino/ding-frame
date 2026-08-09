@@ -8,11 +8,19 @@ const dashscopeBaseUrl = process.env.DASHSCOPE_BASE_URL
     ? `https://${dashscopeWorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
     : "https://dashscope.aliyuncs.com/compatible-mode/v1");
 const visionApiKey = process.env.VISION_API_KEY || dashscopeApiKey;
+const requestedAsrProvider = process.env.ASR_PROVIDER || (dashscopeApiKey ? "dashscope" : "mock");
+const requestedAnalysisProvider = process.env.ANALYSIS_PROVIDER || (visionApiKey ? "openai-compatible" : "mock");
 
 const integerEnv = (name, fallback) => {
   const value = Number.parseInt(process.env[name] || "", 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 };
+
+// 用户显式声明要接真实模型，却没有可用 key 时，安全回退到演示数据，
+// 保证“零配置也能跑通完整流程”；配置错误的其他取值仍会在适配器里报错。
+export function resolveProvider(rawProvider, hasKey) {
+  return (rawProvider === "dashscope" || rawProvider === "openai-compatible") && !hasKey ? "mock" : rawProvider;
+}
 
 export const config = {
   port: integerEnv("PORT", 3000),
@@ -22,8 +30,8 @@ export const config = {
   maxFrames: integerEnv("MAX_FRAMES", 12),
   resultTtlSeconds: integerEnv("RESULT_TTL_SECONDS", 20 * 60),
   tempRoot: process.env.TEMP_ROOT || os.tmpdir(),
-  asrProvider: process.env.ASR_PROVIDER || (dashscopeApiKey ? "dashscope" : "mock"),
-  analysisProvider: process.env.ANALYSIS_PROVIDER || (visionApiKey ? "openai-compatible" : "mock"),
+  asrProvider: resolveProvider(requestedAsrProvider, Boolean(dashscopeApiKey)),
+  analysisProvider: resolveProvider(requestedAnalysisProvider, Boolean(visionApiKey)),
   dashscopeApiKey,
   dashscopeWorkspaceId,
   dashscopeBaseUrl,
@@ -35,6 +43,13 @@ export const config = {
   visionBaseUrl: process.env.VISION_BASE_URL || dashscopeBaseUrl,
   visionModel: process.env.VISION_MODEL || "qwen3-vl-flash"
 };
+
+if (config.asrProvider === "mock" && requestedAsrProvider === "dashscope") {
+  console.warn("[ding-frame] 已声明 ASR_PROVIDER=dashscope 但缺少 DASHSCOPE_API_KEY，自动改用演示听写。");
+}
+if (config.analysisProvider === "mock" && requestedAnalysisProvider === "openai-compatible") {
+  console.warn("[ding-frame] 已声明 ANALYSIS_PROVIDER=openai-compatible 但缺少可用 API Key，自动改用演示画面分析。");
+}
 
 export function asrIsConfigured() {
   return config.asrProvider === "dashscope" && Boolean(config.dashscopeApiKey);

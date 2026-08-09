@@ -32,6 +32,19 @@ npm run check
 npm start
 ```
 
+## 无头分析（命令行）
+
+不打开网页也能批量分析：同一个管线会复用本机配置，结果以 JSON 输出，进度打印在标准错误里。
+
+```bash
+node src/server/cli.js ./demo.mp4
+node src/server/cli.js https://example.com/video.mp4 --json result.json --frames-dir ./frames
+```
+
+- `--json <路径>`：把分析结果写入文件（默认打印到标准输出）。
+- `--frames-dir <路径>`：保留关键帧图片到该目录（默认分析完即删，延续“阅后即焚”语义）。
+- 没有配置模型时同样走演示数据，标准错误里会给出提示。
+
 ## 接入真实模型
 
 复制 `.env.example` 为 `.env`。服务会自动加载 `.env`，但不要把真实 key 提交到 GitHub。
@@ -48,7 +61,7 @@ VISION_MODEL=qwen3-vl-flash
 
 不需要 OSS Bucket。服务会把音频压成 64kbps MP3、按分钟切片，并以 Base64 直接交给千问 ASR；抽帧同样以 Base64 直接交给视觉模型。音频切片在分析完成后立即删除，原视频仅为结果页回看临时保留，到期或手动清除时连同抽帧一起删除。`VISION_API_KEY` 留空时自动复用 `DASHSCOPE_API_KEY`。
 
-画面分析默认使用 `qwen3-vl-flash`。没有 `.env` 时，mock 适配器仍会让抽帧、任务状态和结果页面可验证；此时页面里的听写和总结只是演示数据，不代表真实视频内容。
+画面分析默认使用 `qwen3-vl-flash`。没有 `.env` 时，mock 适配器仍会让抽帧、任务状态和结果页面可验证；此时页面里的听写和总结只是演示数据，不代表真实视频内容。即使按 `.env.example` 声明了 `ASR_PROVIDER=dashscope` / `ANALYSIS_PROVIDER=openai-compatible` 却忘了填 key，服务也会自动回退到演示数据并给出警告，不会让任务直接失败。
 
 百炼免费额度有地域、期限和用量限制，不是永久无限。建议使用华北 2（北京）的通用 API Key，并在百炼控制台开启“免费额度用完即停”，避免额度耗尽后产生费用。参考[新人免费额度](https://help.aliyun.com/zh/model-studio/new-free-quota/)与[千问 ASR API](https://help.aliyun.com/zh/model-studio/qwen-asr-api-reference)。
 

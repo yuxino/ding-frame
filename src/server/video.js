@@ -21,6 +21,7 @@ export async function inspectVideo(inputPath) {
     durationMs: Math.round(durationSeconds * 1000),
     width: parsed.streams?.find((stream) => stream.codec_type === "video")?.width || null,
     height: parsed.streams?.find((stream) => stream.codec_type === "video")?.height || null,
+    hasVideo: parsed.streams?.some((stream) => stream.codec_type === "video") || false,
     hasAudio: parsed.streams?.some((stream) => stream.codec_type === "audio") || false
   };
 }
