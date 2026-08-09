@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { isDouyinHost } from "./url-source.js";
+import { isBilibiliHost, isDouyinHost } from "./url-source.js";
 
 const douyinPageUserAgent =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
@@ -101,6 +101,75 @@ export async function resolveDouyinVideo(value, options = {}) {
   throw new Error("抖音链接重定向次数太多，暂时解析不了。");
 }
 
+const browserLikeUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
+
+export function looksLikeBilibiliLink(value) {
+  if (typeof value !== "string") return false;
+  try {
+    return isBilibiliHost(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+// 从 B 站链接里提取 BV 号：/video/BVxxx 路径或 bvid= 参数都行。
+export function bilibiliBvid(value) {
+  try {
+    const parsed = new URL(value);
+    const fromQuery = parsed.searchParams.get("bvid");
+    if (fromQuery && /^BV[0-9A-Za-z]{10,}$/.test(fromQuery)) return fromQuery;
+    const match = parsed.pathname.match(/(BV[0-9A-Za-z]{10,})/);
+    if (match) return match[1];
+  } catch {
+    // 交给外层报错
+  }
+  return null;
+}
+
+// B 站原生解析：官方接口拿视频信息（标题、cid）和播放直链，不需要登录。
+// b23.tv 短链先跟随重定向到正片地址。
+export async function resolveBilibiliVideo(value, options = {}) {
+  const { fetchImpl, timeoutMs } = { ...defaultOptions, ...options };
+  const headers = {
+    "user-agent": browserLikeUserAgent,
+    referer: "https://www.bilibili.com/",
+    accept: "application/json,text/plain,*/*"
+  };
+  let url = value;
+  const hostname = new URL(url).hostname.toLowerCase();
+  if (hostname === "b23.tv" || hostname.endsWith(".b23.tv")) {
+    const redirected = await fetchImpl(url, {
+      redirect: "follow",
+      headers: { "user-agent": browserLikeUserAgent },
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    url = redirected.url || url;
+  }
+  const bvid = bilibiliBvid(url);
+  if (!bvid) throw new Error("没有从 B 站链接里找到视频编号。");
+
+  const viewResponse = await fetchImpl(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
+    headers,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  const viewBody = await viewResponse.json().catch(() => ({}));
+  if (viewBody.code !== 0) throw new Error(`B 站视频信息获取失败：${viewBody.message || viewBody.code}`);
+  const data = viewBody.data || {};
+  const cid = data.cid || data.pages?.[0]?.cid;
+  if (!cid) throw new Error("B 站这条内容没有可用的分P编号。");
+
+  const playResponse = await fetchImpl(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=64&fnval=1&fnver=0&fourk=1`, {
+    headers,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  const playBody = await playResponse.json().catch(() => ({}));
+  if (playBody.code !== 0) throw new Error(`B 站播放地址获取失败：${playBody.message || playBody.code}`);
+  const direct = playBody.data?.durl?.[0]?.url;
+  if (!direct) throw new Error("B 站没有返回可下载的播放地址（可能需要登录）。");
+
+  return { url: direct, title: typeof data.title === "string" ? data.title : undefined, source: "bilibili" };
+}
+
 // 统一入口：能解析出真实可下载地址就返回它，否则原样返回让下载流程兜底。
 export async function resolveVideoUrl(value, options = {}) {
   if (looksLikeDouyinLink(value)) {
@@ -108,6 +177,14 @@ export async function resolveVideoUrl(value, options = {}) {
       return await resolveDouyinVideo(value, options);
     } catch (error) {
       if (String(error?.message || "").startsWith("抖音")) throw error;
+      return { url: value, source: "direct", title: undefined };
+    }
+  }
+  if (looksLikeBilibiliLink(value)) {
+    try {
+      return await resolveBilibiliVideo(value, options);
+    } catch (error) {
+      if (String(error?.message || "").startsWith("B 站") || String(error?.message || "").includes("BV")) throw error;
       return { url: value, source: "direct", title: undefined };
     }
   }

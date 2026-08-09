@@ -1,6 +1,7 @@
 const browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
 
 const DOUYIN_HOST_SUFFIXES = ["douyin.com", "douyinvod.com", "iesdouyin.com", "snssdk.com", "amemv.com"];
+const BILIBILI_HOST_SUFFIXES = ["bilibili.com", "b23.tv", "bilivideo.com", "hdslb.com"];
 
 export function normalizeVideoUrl(value) {
   if (typeof value !== "string") return value;
@@ -23,12 +24,22 @@ export function headersForVideoUrl(value) {
     headers.referer = "https://www.douyin.com/";
     headers.origin = "https://www.douyin.com";
   }
+  if (isBilibiliHost(parsed.hostname)) {
+    headers.referer = "https://www.bilibili.com/";
+  }
   return headers;
 }
 
 export function isDouyinHost(hostname) {
   const normalized = hostname.toLowerCase();
   return DOUYIN_HOST_SUFFIXES.some(
+    (suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`)
+  );
+}
+
+export function isBilibiliHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return BILIBILI_HOST_SUFFIXES.some(
     (suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`)
   );
 }

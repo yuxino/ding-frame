@@ -61,11 +61,12 @@ npm start
 **第一档 · 原生支持，最稳（无需任何外部工具）**
 
 - 抖音（所有常见形态）：`v.douyin.com` 短链、整段分享文案、`www.douyin.com/video/<id>`、`www.iesdouyin.com/share/video/<id>`、带 `modal_id` 的精选/搜索弹窗页（`jingxuan/search?...`）
+- B站（`www.bilibili.com/video/BVxxx`、`b23.tv` 短链）：官方接口直接解析直链，无需登录
 - 视频直链：任何直接指向 mp4 / mov / webm 等媒体文件的地址
 
 **第二档 · yt-dlp 自动兜底（服务里装了 yt-dlp 就生效，覆盖 1800+ 站点）**
 
-常见热门站：YouTube（含 Shorts、youtu.be）、TikTok、B站（视频/番剧等）、小红书（含 xhslink.com）、微博、Instagram、Twitter/X、Facebook、腾讯视频（v.qq.com）、爱奇艺、优酷、斗鱼、虎牙、搜狐视频、Vimeo 等
+常见热门站：YouTube（含 Shorts、youtu.be）、TikTok、小红书（含 xhslink.com）、微博、Instagram、Twitter/X、Facebook、腾讯视频（v.qq.com）、爱奇艺、优酷、斗鱼、虎牙、搜狐视频、Vimeo 等
 
 **第三档 · 暂不支持**
 
@@ -75,7 +76,7 @@ npm start
 
 **已知限制**
 
-- 抖音链路无需登录、最稳定；其他站点走 yt-dlp，成功率受网络环境与站点反爬影响（例如部分网络下 B站会 412、YouTube 会触发人机验证），必要时可后续加 cookies 支持
+- 抖音与 B站链路无需登录、最稳定；其他站点走 yt-dlp，成功率受网络环境与站点反爬影响（例如部分网络下 YouTube 会触发人机验证），必要时可后续加 cookies 支持
 - 视频时长沿用盯帧第一版限制（默认最长 15 分钟）
 
 ## 无头分析（命令行）

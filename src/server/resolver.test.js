@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  bilibiliBvid,
   deWatermark,
   douyinShareUrl,
   extractUrlFromText,
+  looksLikeBilibiliLink,
   looksLikeDouyinLink,
   parseDouyinPage,
+  resolveBilibiliVideo,
   resolveDouyinVideo
 } from "./resolver.js";
 
@@ -66,6 +69,52 @@ describe("douyinShareUrl", () => {
     expect(douyinShareUrl("https://v.douyin.com/abc/")).toBeNull();
     expect(douyinShareUrl("https://www.douyin.com/note/123")).toBeNull();
     expect(douyinShareUrl("https://www.bilibili.com/video/BV1xx")).toBeNull();
+  });
+});
+
+describe("bilibili", () => {
+  it("recognizes bilibili pages, short links and CDN hosts", () => {
+    expect(looksLikeBilibiliLink("https://www.bilibili.com/video/BV1ShuW6rEcT/?spm=1")).toBe(true);
+    expect(looksLikeBilibiliLink("https://b23.tv/abc123")).toBe(true);
+    expect(looksLikeBilibiliLink("https://upos-sz-estgoss.bilivideo.com/video.mp4")).toBe(true);
+    expect(looksLikeBilibiliLink("https://www.douyin.com/video/1")).toBe(false);
+  });
+
+  it("extracts the BV id from paths and query params", () => {
+    expect(bilibiliBvid("https://www.bilibili.com/video/BV1ShuW6rEcT/?spm_id_from=333")).toBe("BV1ShuW6rEcT");
+    expect(bilibiliBvid("https://www.bilibili.com/video?bvid=BV1xx411c7mD")).toBe("BV1xx411c7mD");
+    expect(bilibiliBvid("https://b23.tv/abc")).toBeNull();
+  });
+
+  it("resolves a bilibili video to its direct mp4 via the official APIs", async () => {
+    const fetchImpl = async (url) => {
+      if (url.includes("/x/web-interface/view")) {
+        return new Response(JSON.stringify({
+          code: 0,
+          data: { title: "测试视频标题", cid: 12345, pages: [{ cid: 12345, page: 1 }] }
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/x/player/playurl")) {
+        return new Response(JSON.stringify({
+          code: 0,
+          data: { durl: [{ url: "https://upos-sz-estgoss.bilivideo.com/video.mp4?e=123" }] }
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      throw new Error(`unexpected url ${url}`);
+    };
+    const resolved = await resolveBilibiliVideo("https://www.bilibili.com/video/BV1ShuW6rEcT/", { fetchImpl });
+    expect(resolved.source).toBe("bilibili");
+    expect(resolved.title).toBe("测试视频标题");
+    expect(resolved.url).toBe("https://upos-sz-estgoss.bilivideo.com/video.mp4?e=123");
+  });
+
+  it("surfaces a readable error when the video info call fails", async () => {
+    const fetchImpl = async () => new Response(JSON.stringify({ code: -404, message: "啥都木有" }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
+    await expect(resolveBilibiliVideo("https://www.bilibili.com/video/BV1ShuW6rEcT/", { fetchImpl }))
+      .rejects.toThrow(/B 站/);
   });
 });
 
