@@ -16,6 +16,7 @@ async function runAnalysis(job) {
   const inputPath = job.inputPath;
   const framesDir = join(job.dir, "frames");
   const audioDir = join(job.dir, "audio");
+  let completed = false;
   try {
     updateJob(job, { status: "processing", progress: { stage: "inspecting", percent: 12, detail: "正在读取视频尺寸和时长。" } });
     const media = await inspectVideo(inputPath);
@@ -33,8 +34,9 @@ async function runAnalysis(job) {
     updateJob(job, { progress: { stage: "interpreting", percent: 82, detail: "把声音与画面放回同一条时间线。" } });
     const result = await analyze({ title: job.title, durationMs: media.durationMs, frames, transcript, framesDir });
     updateJob(job, { status: "done", result, progress: { stage: "done", percent: 100, detail: "分析已经完成。" } });
+    completed = true;
   } finally {
-    await rm(inputPath, { force: true }).catch(() => undefined);
+    if (!completed) await rm(inputPath, { force: true }).catch(() => undefined);
     await rm(audioDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }

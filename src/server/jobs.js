@@ -40,6 +40,7 @@ export function serializeJob(job) {
   if (!job) return null;
   const result = job.result && {
     ...job.result,
+    videoUrl: `/api/jobs/${job.id}/video`,
     frames: job.result.frames.map((frame) => ({
       ...frame,
       url: `/api/jobs/${job.id}/frames/${encodeURIComponent(frame.filename)}`

@@ -176,7 +176,7 @@ function App() {
                   <small>支持完整链接、// 开头或省略协议的视频地址</small>
                 </label>
               )}
-              <div className="capture-foot"><span><span className="tiny-star">✦</span>完成后自动清除原视频与中间文件</span><button className="primary-button" type="submit" disabled={busy}>{busy ? "正在放入…" : "开始拆解"}<span>→</span></button></div>
+              <div className="capture-foot"><span><span className="tiny-star">✦</span>结果到期后自动清除视频与分析文件</span><button className="primary-button" type="submit" disabled={busy}>{busy ? "正在放入…" : "开始拆解"}<span>→</span></button></div>
               {error && <p className="form-error" role="alert">{error}</p>}
             </form>
           </section>
@@ -211,6 +211,8 @@ function ResultView({ job, onClear }) {
   const [remaining, setRemaining] = useState(Math.max(0, job.expiresAt - Date.now()));
   const result = job.result;
   const [selectedFrame, setSelectedFrame] = useState(0);
+  const [currentMs, setCurrentMs] = useState(0);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setRemaining(Math.max(0, job.expiresAt - Date.now())), 1000);
@@ -219,26 +221,61 @@ function ResultView({ job, onClear }) {
 
   const selected = result.frames[selectedFrame] || result.frames[0];
   const countdown = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
+  const activeTranscript = useMemo(() => result.transcript.findIndex((line) => currentMs >= line.startMs && currentMs < line.endMs), [currentMs, result.transcript]);
+
+  function syncToTime(atMs, shouldPlay = true) {
+    const targetMs = Math.min(result.durationMs || atMs, Math.max(0, Number(atMs) || 0));
+    const video = videoRef.current;
+    const seek = () => {
+      video.currentTime = targetMs / 1000;
+      if (shouldPlay) video.play().catch(() => undefined);
+    };
+    if (video) {
+      if (video.readyState >= 1) seek();
+      else video.addEventListener("loadedmetadata", seek, { once: true });
+    }
+    setCurrentMs(targetMs);
+    setSelectedFrame(frameIndexAtTime(result.frames, targetMs));
+  }
+
+  function followPlayback() {
+    const nextMs = Math.round((videoRef.current?.currentTime || 0) * 1000);
+    setCurrentMs(nextMs);
+    setSelectedFrame(frameIndexAtTime(result.frames, nextMs));
+  }
 
   return (
     <section className="result-layout">
       <div className="result-main">
-        <div className="result-heading"><div><div className="eyebrow">分析完成 · {formatDate(job.createdAt)}</div><h1>{result.title || "这段视频，留下了什么？"}</h1><p className="result-deck">{result.summary}</p></div><button className="quiet-button danger" type="button" onClick={onClear}>立即清除</button></div>
+        <div className="result-heading"><div><div className="eyebrow">分析完成 · {formatDate(job.createdAt)}</div><h1>{result.title || "这段视频，留下了什么？"}</h1><div className="summary-block"><span>AI 视频总结</span><p className="result-deck">{result.summary}</p></div></div><button className="quiet-button danger" type="button" onClick={onClear}>立即清除</button></div>
         <div className="stat-row"><div><span>视频时长</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>抽取画面</span><strong>{result.frames.length} 帧</strong></div><div><span>听写片段</span><strong>{result.transcript.length} 段</strong></div><div className="expiry-stat"><span>自动消失</span><strong>{countdown}</strong></div></div>
-        <div className="frame-stage">
-          {selected ? <img src={selected.url} alt={selected.caption || "视频抽帧"} /> : <div className="frame-empty">没有抽到可展示的画面</div>}
-          <div className="frame-stage-caption"><span>{selected?.caption || "关键画面"}</span><span>{selected ? formatTime(selected.atMs) : ""}</span></div>
+        <div className="tag-panel">
+          <div className="tag-panel-copy"><span className="section-kicker">内容标记</span><p>主体、场景、动作和气氛；点标签就去它第一次出现的地方。</p></div>
+          <div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div>
         </div>
-        <div className="frame-strip" aria-label="抽帧时间线">{result.frames.map((frame, index) => <button key={frame.url} type="button" className={index === selectedFrame ? "active" : ""} onClick={() => setSelectedFrame(index)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
-        <div className="highlights"><div className="section-kicker">值得回看的几个瞬间</div>{result.highlights.map((highlight) => <article className="highlight" key={`${highlight.atMs}-${highlight.title}`}><div className="highlight-time">{formatTime(highlight.atMs)}</div><div><h3>{highlight.title}</h3><p>{highlight.detail}</p></div></article>)}</div>
+        <div className="video-stage">
+          <video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>你的浏览器暂时无法播放这段视频。</video>
+          <div className="video-stage-caption"><span>{selected?.caption || "正在回看视频"}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div>
+        </div>
+        <div className="frame-strip" aria-label="关键帧时间线">{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`跳到 ${formatTime(frame.atMs)}：${frame.caption || "关键帧"}`} className={index === selectedFrame ? "active" : ""} onClick={() => syncToTime(frame.atMs)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
+        <div className="highlights"><div className="section-kicker">值得回看的几个瞬间</div>{result.highlights.map((highlight) => <button type="button" className="highlight" key={`${highlight.atMs}-${highlight.title}`} onClick={() => syncToTime(highlight.atMs)}><div className="highlight-time"><span>▶</span>{formatTime(highlight.atMs)}</div><div><h3>{highlight.title}</h3><p>{highlight.detail}</p></div></button>)}</div>
       </div>
-      <aside className="transcript-panel"><div className="panel-heading"><div><span className="panel-kicker">理解侧栏</span><h2>声音落在这里</h2></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.map((line) => <button type="button" className="transcript-line" key={`${line.startMs}-${line.text}`} onClick={() => { const frameIndex = result.frames.findIndex((frame) => frame.atMs >= line.startMs); setSelectedFrame(Math.max(0, frameIndex)); }}><span>{formatTime(line.startMs)}</span><p>{line.text}</p></button>)}</div><div className="panel-note"><span className="tiny-star">✦</span>结果只在这里停留 {Math.ceil(remaining / 60000)} 分钟<br />之后连同抽帧一起离开。</div></aside>
+      <aside className="transcript-panel"><div className="panel-heading"><div><span className="panel-kicker">ASR 时间轴</span><h2>点一句，回到当时</h2></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => <button type="button" className={`transcript-line ${index === activeTranscript ? "active" : ""}`} aria-pressed={index === activeTranscript} key={`${line.startMs}-${line.text}`} onClick={() => syncToTime(line.startMs)}><span>▶ {formatTime(line.startMs)}</span><p>{line.text}</p></button>) : <div className="transcript-empty">这段视频没有识别到可用人声。</div>}</div><div className="panel-note"><span className="tiny-star">✦</span>视频、抽帧和结果还会停留 {Math.ceil(remaining / 60000)} 分钟<br />到时一起离开。</div></aside>
     </section>
   );
 }
 
+function frameIndexAtTime(frames, atMs) {
+  let nearest = 0;
+  for (let index = 0; index < frames.length; index += 1) {
+    if (frames[index].atMs > atMs) break;
+    nearest = index;
+  }
+  return nearest;
+}
+
 function InfoModal({ onClose }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><span className="panel-kicker">盯帧 · 小说明</span><h2 id="info-title">让视频停在临时空间里。</h2><p>本地视频会在上传期间传到服务端临时目录，视频地址会被服务端短暂取回。分析结束后，原视频、抽出的音频会立即删除；抽帧和文本结果只保留一小会儿。</p><p className="modal-muted">没有配置模型密钥时，项目会用演示数据跑完整流程。配置百炼通用 API Key 后，千问 ASR 与视觉模型会直接理解声音和画面，全程不需要 Bucket。</p><button className="primary-button" type="button" onClick={onClose}>知道了 <span>→</span></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><span className="panel-kicker">盯帧 · 小说明</span><h2 id="info-title">让视频停在临时空间里。</h2><p>本地视频会上传到服务端临时目录，视频地址会被服务端短暂取回。分析结束后只保留回看需要的视频、抽帧和文本，倒计时结束或手动清除时一起删除；中间音频会在分析后立即删除。</p><p className="modal-muted">没有配置模型密钥时，项目会用演示数据跑完整流程。配置百炼通用 API Key 后，千问 ASR 与视觉模型会直接理解声音和画面，全程不需要 Bucket。</p><button className="primary-button" type="button" onClick={onClose}>知道了 <span>→</span></button></div></div>;
 }
 
 export default App;

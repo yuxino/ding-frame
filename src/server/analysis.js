@@ -18,6 +18,10 @@ export function localAnalysis({ title, durationMs, frames, transcript }) {
     title: title || "一段小视频的临时切片",
     durationMs: durationMs || 0,
     summary: "这段视频的线索集中在几处声音与画面的交汇处。下面按时间顺序放回它们，适合从中段开始回看。",
+    tags: [
+      { label: "小视频", category: "形式", atMs: 0 },
+      { label: transcript.length ? "有人声" : "无对白", category: "形式", atMs: 0 }
+    ],
     highlights,
     transcript,
     frames: frames.map((frame, index) => ({ ...frame, caption: index === 0 ? "进入这段视频的第一个画面" : `第 ${index + 1} 个视觉切片` }))
@@ -26,22 +30,37 @@ export function localAnalysis({ title, durationMs, frames, transcript }) {
 
 async function analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir }) {
   if (!config.visionApiKey) throw new Error("配置 VISION_API_KEY 后才能使用画面理解模型。");
-  const frameContent = await Promise.all(frames.slice(0, 6).map(async (frame) => {
+  const selectedFrames = selectRepresentativeFrames(frames, 6);
+  const frameGroups = await Promise.all(selectedFrames.map(async ({ frame, index }) => {
     const base64 = (await readFile(`${framesDir}/${frame.filename}`)).toString("base64");
-    return { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } };
+    return [
+      { type: "text", text: `关键帧 index=${index}，atMs=${frame.atMs}` },
+      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
+    ];
   }));
+  const frameContent = frameGroups.flat();
   const transcriptText = transcript.map((line) => `[${line.startMs}] ${line.text}`).join(" ").slice(0, 12000);
-  const prompt = `你在分析一段小视频。结合画面和听写理解真实内容，只返回一个 JSON 对象，不要 markdown：{"title":"不超过18字的内容标题","summary":"不超过80字的中文总结","highlights":[{"atMs":0,"title":"不超过12字","detail":"不超过60字"}],"frameCaptions":[{"index":0,"caption":"不超过24字的画面描述"}]}。frameCaptions.index 从 0 开始，对应图片顺序。视频原始名称：${title}；时长毫秒：${durationMs}；听写：${transcriptText || "无可用听写"}`;
+  const prompt = `你在分析一段小视频。结合画面和听写理解真实内容，只返回一个 JSON 对象，不要 markdown：{"title":"不超过18字的内容标题","summary":"不超过80字的完整视频总结","tags":[{"label":"不超过8字","category":"主体|场景|动作|主题|氛围|形式","atMs":0}],"highlights":[{"atMs":0,"title":"不超过12字","detail":"不超过60字"}],"frameCaptions":[{"index":0,"caption":"不超过24字的画面描述"}]}。tags 给出 4 到 8 个最值得检索或回看的标签，atMs 必须参考相邻关键帧或听写的时间，是该内容首次明确出现的毫秒时间；只标声音或画面能够确认的内容，不推断人物身份、族群、疾病等敏感属性。每张图片前都标注了它在完整抽帧列表中的原始 index 和 atMs，frameCaptions.index 必须原样使用该原始 index。视频原始名称：${title}；时长毫秒：${durationMs}；听写：${transcriptText || "无可用听写"}`;
   const response = await fetch(`${config.visionBaseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${config.visionApiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: config.visionModel, temperature: 0.2, max_tokens: 800, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
+    body: JSON.stringify({ model: config.visionModel, temperature: 0.2, max_tokens: 1000, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
     signal: AbortSignal.timeout(config.dashscopeTimeoutMs)
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error?.message || body.message || `画面模型请求失败：${response.status}`);
   const raw = body.choices?.[0]?.message?.content || "";
   return normalizeVisionModelResult({ raw, fallbackTitle: title, durationMs, frames, transcript });
+}
+
+export function selectRepresentativeFrames(frames, limit) {
+  if (!Array.isArray(frames) || frames.length === 0 || limit <= 0) return [];
+  if (frames.length <= limit) return frames.map((frame, index) => ({ frame, index }));
+  const lastIndex = frames.length - 1;
+  return Array.from({ length: limit }, (_, slot) => {
+    const index = Math.round((slot * lastIndex) / (limit - 1));
+    return { frame: frames[index], index };
+  });
 }
 
 export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, frames, transcript }) {
@@ -79,11 +98,32 @@ export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, fra
     title: "人声线索",
     detail: cleanText(line.text, "听写片段", 120)
   }));
+  const allowedCategories = new Set(["主体", "场景", "动作", "主题", "氛围", "形式"]);
+  const seenTags = new Set();
+  const tags = (Array.isArray(parsed.tags) ? parsed.tags : [])
+    .map((item) => ({
+      label: cleanText(item?.label, "", 16),
+      category: allowedCategories.has(item?.category) ? item.category : "主题",
+      atMs: Math.min(maxTime, Math.max(0, Number(item?.atMs) || 0))
+    }))
+    .filter((tag) => {
+      const key = tag.label.toLocaleLowerCase("zh-CN");
+      if (!key || seenTags.has(key)) return false;
+      seenTags.add(key);
+      return true;
+    })
+    .slice(0, 8);
+  const fallbackTags = (highlights.length ? highlights : fallbackHighlights).slice(0, 4).map((item) => ({
+    label: cleanText(item.title, "视频片段", 16),
+    category: "主题",
+    atMs: item.atMs
+  }));
 
   return {
     title: cleanText(parsed.title, fallbackTitle || "一段小视频的临时切片", 40),
     durationMs: maxTime,
     summary: cleanText(parsed.summary, "画面模型没有返回摘要。", 180),
+    tags: tags.length ? tags : fallbackTags,
     highlights: highlights.length ? highlights : fallbackHighlights,
     transcript,
     frames: normalizedFrames

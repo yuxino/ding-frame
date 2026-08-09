@@ -11,6 +11,7 @@ import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
 import { enqueueAnalysis } from "./pipeline.js";
 import { headersForVideoUrl, normalizeVideoUrl } from "./url-source.js";
+import { parseByteRange } from "./video-stream.js";
 import { inspectVideo } from "./video.js";
 
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
@@ -27,6 +28,7 @@ app.post("/api/analyze/upload", async (request, reply) => {
     job = await createJob({ source: "upload", title: part.filename });
     const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
     job.inputPath = inputPath;
+    job.inputMimeType = part.mimetype;
     await streamToFile(part.file, inputPath, config.maxUploadBytes);
     if (part.file.truncated) throw new Error(`视频太大了，第一版最多支持 ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB。`);
     enqueueAnalysis(job);
@@ -46,7 +48,8 @@ app.post("/api/analyze/url", async (request, reply) => {
     updateJob(job, { progress: { stage: "downloading", percent: 8, detail: "正在把视频放入临时空间。" } });
     const inputPath = join(job.dir, "input.mp4");
     job.inputPath = inputPath;
-    await downloadUrl(url, inputPath, job);
+    const download = await downloadUrl(url, inputPath, job);
+    job.inputMimeType = download.contentType;
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
@@ -79,6 +82,36 @@ app.get("/api/jobs/:id/frames/:filename", async (request, reply) => {
     return reply.header("cache-control", "no-store").type("image/jpeg").send(createReadStream(framePath));
   } catch {
     return reply.code(404).send({ error: "这张抽帧已经消失了。" });
+  }
+});
+
+app.get("/api/jobs/:id/video", async (request, reply) => {
+  const job = getJob(request.params.id);
+  if (!job?.result || !job.inputPath) return reply.code(404).send({ error: "这段视频已经消失了。" });
+  try {
+    const info = await stat(job.inputPath);
+    const rangeHeader = request.headers.range;
+    const range = rangeHeader ? parseByteRange(rangeHeader, info.size) : null;
+    if (rangeHeader && !range) {
+      return reply.code(416).header("content-range", `bytes */${info.size}`).send();
+    }
+
+    reply
+      .header("accept-ranges", "bytes")
+      .header("cache-control", "no-store")
+      .type(normalizeVideoContentType(job.inputMimeType));
+
+    if (!range) {
+      return reply.header("content-length", info.size).send(createReadStream(job.inputPath));
+    }
+
+    return reply
+      .code(206)
+      .header("content-range", `bytes ${range.start}-${range.end}/${info.size}`)
+      .header("content-length", range.end - range.start + 1)
+      .send(createReadStream(job.inputPath, range));
+  } catch {
+    return reply.code(404).send({ error: "这段视频已经消失了。" });
   }
 });
 
@@ -120,7 +153,7 @@ async function downloadUrl(url, outputPath, job) {
       if (contentLength && bytes !== contentLength) throw new Error(`视频下载不完整（收到 ${bytes} / ${contentLength} 字节）。`);
       await inspectVideo(outputPath);
       updateJob(job, { progress: { stage: "inspecting", percent: 12, detail: "视频已进入临时空间。" } });
-      return;
+      return { contentType };
     } catch (error) {
       lastError = error;
       if (error.message.startsWith("视频太长") || error.message.includes("不是可直接下载的视频")) throw error;
@@ -148,4 +181,9 @@ function isPrivateHost(hostname) {
 function extensionFor(filename) {
   const extension = filename.match(/\.[a-z0-9]{2,5}$/i)?.[0]?.toLowerCase();
   return extension || ".mp4";
+}
+
+function normalizeVideoContentType(value) {
+  const type = typeof value === "string" ? value.split(";", 1)[0].trim().toLowerCase() : "";
+  return type.startsWith("video/") ? type : "video/mp4";
 }
