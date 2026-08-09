@@ -285,7 +285,7 @@ function ProgressView({ job, progress, error, onClear }: { job: Job; progress: n
         <div className="progress-status"><span>{job.progress ? stageLabels[job.progress.stage as keyof typeof stageLabels] || "处理中" : "处理中"}</span><strong>{progress}%</strong></div>
         <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
         <p>{job.progress?.detail || "正在准备…"}</p>
-        {error && <div className="inline-error">{error}</div>}
+        {(error || job.error) && <div className="inline-error" role="alert">{error || job.error}</div>}
         <div className="process-list"><span className="done">视频已进入临时空间</span><span className={progress >= 35 ? "done" : "current"}>声音与画面分析</span><span className={progress >= 100 ? "done" : "waiting"}>生成可读结果</span></div>
         <button className="text-button" type="button" onClick={onClear}>取消并清除</button>
       </div>
