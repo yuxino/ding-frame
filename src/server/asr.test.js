@@ -67,6 +67,10 @@ describe("Fun-ASR subtitle adapter", () => {
     const lines = await transcribe({
       audioSegments: [{ path, startMs: 30_000, endMs: 90_000 }],
       durationMs: 90_000,
+      provider: "dashscope",
+      apiKey: "test-key",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "fun-asr-flash-2026-06-15",
       fetchImpl: async () => new Response(JSON.stringify({
         output: { output: { sentence: { text: "测试。", words: [{ begin_time: 0, end_time: 400, text: " 测试", punctuation: "。" }] } } }
       }), { status: 200, headers: { "content-type": "application/json" } })

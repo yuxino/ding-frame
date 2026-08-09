@@ -12,20 +12,30 @@ import { extractFullAudio } from "./video.js";
 const syncAsrModel = "fun-asr-flash-2026-06-15";
 const asyncAsrModel = "fun-asr";
 
-export async function transcribe({ audioSegments, durationMs, fetchImpl = fetch }) {
-  if (config.asrProvider === "mock") return mockTranscript(durationMs);
-  if (config.asrProvider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${config.asrProvider}`);
-  if (!config.dashscopeApiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用真实听写。");
+export async function transcribe({
+  audioSegments,
+  durationMs,
+  fetchImpl = fetch,
+  provider = config.asrProvider,
+  apiKey = config.dashscopeApiKey,
+  baseUrl = config.dashscopeBaseUrl,
+  model = config.dashscopeModel,
+  maxBytes = config.asrMaxSegmentBytes,
+  timeoutMs = config.dashscopeTimeoutMs
+}) {
+  if (provider === "mock") return mockTranscript(durationMs);
+  if (provider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${provider}`);
+  if (!apiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用真实听写。");
 
   const transcript = [];
   for (const segment of audioSegments || []) {
     const lines = await requestSegmentSubtitle({
       segment,
-      apiKey: config.dashscopeApiKey,
-      baseUrl: config.dashscopeBaseUrl,
-      model: config.dashscopeModel,
-      maxBytes: config.asrMaxSegmentBytes,
-      timeoutMs: config.dashscopeTimeoutMs,
+      apiKey,
+      baseUrl,
+      model,
+      maxBytes,
+      timeoutMs,
       fetchImpl
     });
     for (const line of lines) {
