@@ -1,0 +1,93 @@
+name: Deploy and Restart ding-frame
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Resolve deployment settings
+        id: deploy-meta
+        run: |
+          PROJECT_NAME="$(node -p "require('./package.json').name")"
+          echo "project_name=$PROJECT_NAME" >> "$GITHUB_OUTPUT"
+          echo "deploy_target=~/$PROJECT_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build client
+        run: npm run build:client
+
+      - name: Check deployment secrets
+        id: deploy-secrets
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
+        run: |
+          if [ -n "$SERVER_HOST" ] && [ -n "$SERVER_PASSWORD" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "SERVER_HOST or SERVER_PASSWORD is not configured; skipping remote deployment."
+          fi
+
+      - name: Deploy files to server
+        if: steps.deploy-secrets.outputs.ready == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "dist/,src/,package.json,package-lock.json"
+          target: ${{ steps.deploy-meta.outputs.deploy_target }}
+          strip_components: 0
+
+      - name: Restart ding-frame with pm2
+        if: steps.deploy-secrets.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_PORT: "3000"
+          ASR_PROVIDER: ${{ secrets.ASR_PROVIDER }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          ASR_MODEL: ${{ secrets.ASR_MODEL }}
+          ANALYSIS_PROVIDER: ${{ secrets.ANALYSIS_PROVIDER }}
+          VISION_MODEL: ${{ secrets.VISION_MODEL }}
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          envs: APP_PORT,ASR_PROVIDER,DASHSCOPE_API_KEY,ASR_MODEL,ANALYSIS_PROVIDER,VISION_MODEL,PUBLIC_BASE_URL
+          script: |
+            set -e
+            cd ${{ steps.deploy-meta.outputs.deploy_target }}
+            npm ci --production
+            cat > .env <<EOF
+            PORT=${APP_PORT}
+            ASR_PROVIDER=${ASR_PROVIDER}
+            DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+            ASR_MODEL=${ASR_MODEL}
+            ANALYSIS_PROVIDER=${ANALYSIS_PROVIDER}
+            VISION_MODEL=${VISION_MODEL}
+            PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+            EOF
+            chmod 600 .env
+            pm2 describe ding-frame >/dev/null 2>&1 && pm2 reload ding-frame --update-env || pm2 start src/server/index.js --name ding-frame
+            pm2 save
