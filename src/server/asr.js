@@ -49,7 +49,7 @@ export async function transcribe({
   return transcript;
 }
 
-export async function transcribeFullAudio({ inputPath, durationMs, audioDir, publicBaseUrl }) {
+export async function transcribeFullAudio({ inputPath, durationMs, audioDir, publicBaseUrl, fetchImpl = fetch }) {
   if (config.asrProvider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${config.asrProvider}`);
   if (!config.dashscopeApiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用真实听写。");
   if (!publicBaseUrl) throw new Error("说话人分离需要配置 PUBLIC_BASE_URL（服务的公网地址）。");
