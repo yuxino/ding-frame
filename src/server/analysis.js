@@ -7,7 +7,7 @@ export async function analyze({ title, durationMs, frames, transcript, framesDir
   return analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir });
 }
 
-function localAnalysis({ title, durationMs, frames, transcript }) {
+export function localAnalysis({ title, durationMs, frames, transcript }) {
   const usableFrames = frames.length ? frames : [{ filename: "", atMs: 0 }];
   const highlights = transcript.slice(0, Math.min(3, transcript.length)).map((line, index) => ({
     atMs: line.startMs || usableFrames[index % usableFrames.length].atMs,

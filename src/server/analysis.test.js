@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { config } from "./config.js";
-import { analyze, normalizeVisionModelResult } from "./analysis.js";
+import { localAnalysis, normalizeVisionModelResult } from "./analysis.js";
 
 describe("local analysis", () => {
   it("keeps transcript and frames aligned in a readable result", async () => {
-    const result = await analyze({
+    const result = localAnalysis({
       title: "测试视频",
       durationMs: 18000,
       frames: [{ filename: "frame-001.jpg", atMs: 0 }],
@@ -17,9 +16,15 @@ describe("local analysis", () => {
     expect(result.highlights[0].atMs).toBe(0);
   });
 
-  it("defaults to the mock provider when no model is configured", () => {
-    expect(config.asrProvider).toBe("mock");
-    expect(config.analysisProvider).toBe("mock");
+  it("keeps a zero-configuration fallback available", () => {
+    const result = localAnalysis({
+      title: "无声视频",
+      durationMs: 1000,
+      frames: [],
+      transcript: []
+    });
+    expect(result.summary).toContain("声音与画面");
+    expect(result.frames).toEqual([]);
   });
 });
 

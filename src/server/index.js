@@ -10,7 +10,7 @@ import fastifyStatic from "@fastify/static";
 import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
 import { enqueueAnalysis } from "./pipeline.js";
-import { headersForVideoUrl } from "./url-source.js";
+import { headersForVideoUrl, normalizeVideoUrl } from "./url-source.js";
 import { inspectVideo } from "./video.js";
 
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
@@ -40,7 +40,7 @@ app.post("/api/analyze/upload", async (request, reply) => {
 app.post("/api/analyze/url", async (request, reply) => {
   let job;
   try {
-    const url = request.body?.url;
+    const url = normalizeVideoUrl(request.body?.url);
     validateVideoUrl(url);
     job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址" });
     updateJob(job, { progress: { stage: "downloading", percent: 8, detail: "正在把视频放入临时空间。" } });

@@ -172,8 +172,8 @@ function App() {
               ) : (
                 <label className="url-field">
                   <span>公开的视频 URL</span>
-                  <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…/your-video.mp4" />
-                  <small>第一版支持可直接下载的视频地址</small>
+                  <input type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://… 或 //www.douyin.com/…" />
+                  <small>支持完整链接、// 开头或省略协议的视频地址</small>
                 </label>
               )}
               <div className="capture-foot"><span><span className="tiny-star">✦</span>完成后自动清除原视频与中间文件</span><button className="primary-button" type="submit" disabled={busy}>{busy ? "正在放入…" : "开始拆解"}<span>→</span></button></div>

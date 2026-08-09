@@ -1,5 +1,15 @@
 const browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
 
+export function normalizeVideoUrl(value) {
+  if (typeof value !== "string") return value;
+  const normalized = value.trim();
+  if (normalized.startsWith("//")) return `https:${normalized}`;
+  if (!/^[a-z][a-z\d+.-]*:/i.test(normalized) && /^[^/\s]+\.[^/\s]+/.test(normalized)) {
+    return `https://${normalized}`;
+  }
+  return normalized;
+}
+
 export function headersForVideoUrl(value) {
   const parsed = new URL(value);
   const headers = {
