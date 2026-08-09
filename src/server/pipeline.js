@@ -2,7 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "./config.js";
 import { analyze } from "./analysis.js";
-import { transcribe } from "./asr.js";
+import { transcribe, transcribeFullAudio } from "./asr.js";
 import { updateJob } from "./jobs.js";
 import { extractAudioSegments, extractFrames, inspectVideo } from "./video.js";
 
@@ -24,14 +24,21 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onPr
 
   onProgress({ stage: "extracting_audio", percent: 46, detail: "把声音整理成适合听写的轨道。" });
   await mkdir(audioDir, { recursive: true });
-  const audioSegments = media.hasAudio
-    ? await extractAudioSegments(inputPath, audioDir, media.durationMs)
-    : [];
-
-  onProgress({ stage: "transcribing", percent: 65, detail: !media.hasAudio ? "视频没有声音，继续理解画面。" : config.asrProvider === "mock" ? "演示听写正在生成。" : "千问 ASR 正在听写人声。" });
-  const transcript = audioSegments.length
-    ? await transcribe({ audioSegments, durationMs: media.durationMs })
-    : [];
+  let transcript = [];
+  if (media.hasAudio) {
+    if (config.asrDiarization && config.asrProvider === "dashscope") {
+      onProgress({ stage: "transcribing", percent: 60, detail: "正在做说话人分离与听写。" });
+      transcript = await transcribeFullAudio({ inputPath, durationMs: media.durationMs, audioDir, publicBaseUrl: config.publicBaseUrl });
+    } else {
+      const audioSegments = await extractAudioSegments(inputPath, audioDir, media.durationMs);
+      onProgress({ stage: "transcribing", percent: 65, detail: config.asrProvider === "mock" ? "演示听写正在生成。" : "Fun-ASR 正在生成逐句字幕。" });
+      transcript = audioSegments.length
+        ? await transcribe({ audioSegments, durationMs: media.durationMs })
+        : [];
+    }
+  } else {
+    onProgress({ stage: "transcribing", percent: 65, detail: "视频没有声音，继续理解画面。" });
+  }
 
   onProgress({ stage: "interpreting", percent: 82, detail: "把声音与画面放回同一条时间线。" });
   const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir });

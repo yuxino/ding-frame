@@ -164,6 +164,19 @@ button:disabled { cursor: wait; opacity: .55; }
 .minute-subtitle p { margin: 0; font-size: 13px; line-height: 1.75; }
 .minute-subtitle em { display: flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--accent-deep); font-size: 8px; font-style: normal; font-weight: 650; opacity: 0; transition: opacity .16s ease; }
 .transcript-minute:hover .minute-subtitle em, .transcript-minute.active .minute-subtitle em { opacity: 1; }
+.transcript-line { position: relative; display: grid; grid-template-columns: 58px 1fr; gap: 14px; width: 100%; padding: 14px 5px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-2); background: transparent; text-align: left; }
+.transcript-line::before { content: ""; position: absolute; top: 10px; bottom: 10px; left: -20px; width: 3px; border-radius: 0 3px 3px 0; background: transparent; }
+.transcript-line:hover, .transcript-line.active { color: var(--ink); }
+.transcript-line.active::before { background: var(--accent-deep); }
+.line-rail { display: grid; align-content: start; gap: 3px; padding-top: 2px; }
+.line-rail strong { font-size: 12px; font-weight: 720; letter-spacing: -.02em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.line-rail i { color: var(--muted); font-size: 8px; font-style: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.line-body { display: block; min-width: 0; }
+.line-body small { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--muted); font-size: 8px; }
+.line-body small i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-deep); }
+.line-body p { margin: 0; font-size: 13px; line-height: 1.6; }
+.line-body em { display: flex; align-items: center; gap: 5px; margin-top: 7px; color: var(--accent-deep); font-size: 8px; font-style: normal; font-weight: 650; opacity: 0; transition: opacity .16s ease; }
+.transcript-line:hover .line-body em, .transcript-line.active .line-body em { opacity: 1; }
 .transcript-empty { padding: 50px 20px; color: var(--muted); font-size: 12px; line-height: 1.7; text-align: center; }
 .panel-note { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 16px 20px; border-top: 1px solid var(--line); color: var(--muted); background: #fafbf8; font-size: 8px; }
 

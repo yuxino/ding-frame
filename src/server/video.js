@@ -26,6 +26,16 @@ export async function inspectVideo(inputPath) {
   };
 }
 
+export async function extractFullAudio(inputPath, outputPath) {
+  await runCommand(ffmpegBin, [
+    "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
+    "-vn", "-ac", "1", "-ar", "16000",
+    "-c:a", "libmp3lame", "-b:a", "128k",
+    outputPath
+  ]);
+  return outputPath;
+}
+
 export async function extractFrames(inputPath, outputDir) {
   await mkdir(outputDir, { recursive: true });
   await runCommand(ffmpegBin, ["-hide_banner", "-loglevel", "error", "-y", "-i", inputPath, "-vf", `fps=1/${config.frameIntervalSeconds},scale=960:-2`, "-frames:v", String(config.maxFrames), join(outputDir, "frame-%03d.jpg")]);

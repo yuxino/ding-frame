@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { groupTranscriptByMinute } from "./transcript.js";
+import { useEffect, useRef, useState } from "react";
 
 const stageLabels = {
   queued: "排队中",
@@ -240,7 +239,6 @@ function ResultView({ job, onClear }) {
 
   const selected = result.frames[selectedFrame] || result.frames[0];
   const countdown = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
-  const transcriptMinutes = useMemo(() => groupTranscriptByMinute(result.transcript, result.durationMs), [result.durationMs, result.transcript]);
   const activeMinute = Math.floor(currentMs / 60000);
 
   function syncToTime(atMs, shouldPlay = true) {
@@ -274,7 +272,7 @@ function ResultView({ job, onClear }) {
 
         <div className="summary-block"><span><Glyph name="spark" size={15} />AI 视频总结</span><p>{result.summary}</p></div>
 
-        <div className="stat-row"><div><span>视频时长</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>关键画面</span><strong>{result.frames.length}</strong></div><div><span>字幕分钟</span><strong>{transcriptMinutes.length}</strong></div><div><span>自动清除</span><strong className="countdown">{countdown}</strong></div></div>
+        <div className="stat-row"><div><span>视频时长</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>关键画面</span><strong>{result.frames.length}</strong></div><div><span>字幕句数</span><strong>{result.transcript.length}</strong></div><div><span>自动清除</span><strong className="countdown">{countdown}</strong></div></div>
 
         <section className="tag-panel">
           <div className="section-heading"><span>内容标签</span><small>点击跳到首次出现的位置</small></div>
@@ -295,13 +293,14 @@ function ResultView({ job, onClear }) {
       </div>
 
       <aside className="transcript-panel">
-        <div className="panel-heading"><div><span className="page-label">MINUTE CAPTIONS</span><h2>分钟字幕</h2><p>每分钟一格，点击直接回看。</p></div><span className="live-dot" /></div>
+        <div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>字幕</h2><p>每句一行，带说话人标签，点击直接回看。</p></div><span className="live-dot" /></div>
         <div className="transcript-list">
-          {transcriptMinutes.length ? transcriptMinutes.map((group) => {
-            const active = group.minute === activeMinute;
-            return <button type="button" className={`transcript-minute ${active ? "active" : ""}`} aria-pressed={active} key={group.minute} onClick={() => syncToTime(group.startMs)}>
-              <span className="minute-rail"><strong>{String(group.minute + 1).padStart(2, "0")}</strong><i>{formatTime(group.startMs)}—{formatTime(group.endMs)}</i></span>
-              <span className="minute-subtitle"><small><i />{group.speakerLabel}</small><p>{group.text}</p><em><Glyph name="play" size={11} />从 {formatTime(group.startMs)} 播放</em></span>
+          {result.transcript.length ? result.transcript.map((line, index) => {
+            const active = currentMs >= line.startMs && currentMs < line.endMs;
+            const speaker = line.speaker !== undefined && line.speaker !== null && String(line.speaker).trim() ? `说话人 ${line.speaker}` : "人声";
+            return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}>
+              <span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span>
+              <span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />从 {formatTime(line.startMs)} 播放</em></span>
             </button>;
           }) : <div className="transcript-empty">这段视频没有识别到可用人声。</div>}
         </div>

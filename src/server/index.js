@@ -9,6 +9,7 @@ import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
 import { createJob, getJob, purgeJob, serializeJob, updateJob } from "./jobs.js";
+import { getTempAudio } from "./temp-audio.js";
 import { enqueueAnalysis } from "./pipeline.js";
 import { extractUrlFromText, resolveVideoUrl } from "./resolver.js";
 import { headersForVideoUrl, normalizeVideoUrl } from "./url-source.js";
@@ -86,6 +87,22 @@ app.get("/api/jobs/:id/frames/:filename", async (request, reply) => {
     return reply.header("cache-control", "no-store").type("image/jpeg").send(createReadStream(framePath));
   } catch {
     return reply.code(404).send({ error: "这张抽帧已经消失了。" });
+  }
+});
+
+// 说话人分离时把整段音频临时挂在公网地址上，交给百炼异步转写回源；只允许读取已登记的本机文件。
+app.get("/api/temp/:token", async (request, reply) => {
+  const filePath = getTempAudio(request.params.token);
+  if (!filePath) return reply.code(404).send({ error: "这个临时文件已经消失了。" });
+  try {
+    const info = await stat(filePath);
+    return reply
+      .header("content-type", "audio/mpeg")
+      .header("content-length", info.size)
+      .header("cache-control", "no-store")
+      .send(createReadStream(filePath));
+  } catch {
+    return reply.code(404).send({ error: "这个临时文件已经消失了。" });
   }
 });
 

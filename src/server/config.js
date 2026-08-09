@@ -9,6 +9,7 @@ const dashscopeBaseUrl = process.env.DASHSCOPE_BASE_URL
     : "https://dashscope.aliyuncs.com/compatible-mode/v1");
 const visionApiKey = process.env.VISION_API_KEY || dashscopeApiKey;
 const requestedAsrProvider = process.env.ASR_PROVIDER || (dashscopeApiKey ? "dashscope" : "mock");
+const requestedDiarization = process.env.ASR_DIARIZATION;
 const requestedAnalysisProvider = process.env.ANALYSIS_PROVIDER || (visionApiKey ? "openai-compatible" : "mock");
 
 const integerEnv = (name, fallback) => {
@@ -35,8 +36,12 @@ export const config = {
   dashscopeApiKey,
   dashscopeWorkspaceId,
   dashscopeBaseUrl,
-  dashscopeModel: process.env.ASR_MODEL || "qwen3-asr-flash",
+  dashscopeModel: process.env.ASR_MODEL || "fun-asr-flash-2026-06-15",
   asrSegmentSeconds: integerEnv("ASR_SEGMENT_SECONDS", 60),
+  // 说话人分离需要把整段音频交给百炼异步转写（要求服务有公网地址）。
+  // 默认在配置了 PUBLIC_BASE_URL 时开启，也可以用 ASR_DIARIZATION=on/off 强制指定。
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, ""),
+  asrDiarization: requestedDiarization === "on" ? true : requestedDiarization === "off" ? false : Boolean(process.env.PUBLIC_BASE_URL),
   asrMaxSegmentBytes: integerEnv("ASR_MAX_SEGMENT_BYTES", 8 * 1024 * 1024),
   dashscopeTimeoutMs: integerEnv("DASHSCOPE_TIMEOUT_MS", 120000),
   visionApiKey,

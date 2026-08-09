@@ -10,7 +10,8 @@
 - 链接解析：直接贴抖音分享链接（`v.douyin.com` 短链、分享文案、`iesdouyin.com` 分享页、带 `modal_id` 的精选/搜索页）即可自动解析出真实无水印播放地址；其他热门网站（B站、YouTube、小红书等）在安装了 yt-dlp 时自动兜底
 - 抖音播放直链兼容：自动跟随 CDN 跳转并补齐浏览器请求头
 - FFmpeg 抽帧与音频整理
-- ASR 适配器：默认演示数据，可切换阿里云百炼 `qwen3-asr-flash`
+- 逐句字幕：Fun-ASR-Flash 按词级时间戳聚合，每句字幕带起止时间，点击直接回看
+- 说话人分离：配置公网地址后自动开启，字幕带「说话人 N」标签（多人对话/访谈场景）
 - 画面分析适配器：默认本地整理，可切换阿里云百炼兼容 OpenAI Chat Completions 的视觉模型
 - 结果页：临时视频播放器、AI 总结、内容标签、关键帧、ASR 和回看亮点
 - 点击标签、关键帧、ASR 或回看亮点可直接跳到视频对应位置
@@ -32,6 +33,19 @@ npm run dev
 npm run check
 npm start
 ```
+
+## 字幕与说话人分离
+
+- **逐句字幕（默认）**：ASR 用同步 Fun-ASR-Flash（base64 直传，无需公网地址），返回词级时间戳后按标点/停顿聚合为字幕行；结果页每句一行，点击直接跳到对应位置。
+- **说话人分离（可选）**：百炼的同步 Fun-ASR-Flash 不支持说话人分离，带说话人标签的转写要走异步 Fun-ASR（整段音频 + `diarization_enabled`），要求服务有**公网可访问的地址**：
+  ```env
+  # 服务公网地址（例如 ECS 的公网 IP/域名），配置后自动开启说话人分离
+  PUBLIC_BASE_URL=http://你的公网地址:3010
+  # 也可以用 ASR_DIARIZATION=on/off 强制指定，auto 表示跟随 PUBLIC_BASE_URL
+  ASR_DIARIZATION=auto
+  ```
+  开启后，分析时会先把整段音频临时挂到 `/api/temp/<token>` 供百炼回源，任务结束立即删除，不会长期暴露。
+- 本地开发没有公网地址时自动走「逐句字幕」模式，不受影响。
 
 ## 链接解析原理
 
@@ -87,7 +101,7 @@ node src/server/cli.js https://example.com/video.mp4 --json result.json --frames
 ASR_PROVIDER=dashscope
 ANALYSIS_PROVIDER=openai-compatible
 DASHSCOPE_API_KEY=你的百炼通用APIKey
-ASR_MODEL=qwen3-asr-flash
+ASR_MODEL=fun-asr-flash-2026-06-15
 VISION_MODEL=qwen3-vl-flash
 ```
 
