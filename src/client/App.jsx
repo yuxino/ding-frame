@@ -112,7 +112,7 @@ function App() {
             <span className="brand-mark" aria-hidden="true">盯</span>
             <div>
               <div className="brand-name">盯帧</div>
-              <div className="brand-tagline">看见，再理解</div>
+              <div className="brand-tagline">一眼盯帧，鉴定为真</div>
             </div>
           </div>
           <nav className="rail-nav">
@@ -142,7 +142,7 @@ function App() {
         {!job && (
           <section className="landing-layout">
             <div className="hero-copy">
-              <div className="eyebrow">短视频 · 只留线索</div>
+              <div className="eyebrow">一眼盯帧 · 鉴定为真</div>
               <h1>把一段小视频，<br /><em>拆成几处</em>值得记住的瞬间。</h1>
               <p className="hero-deck">抽出画面，听见人声，再把它们排回时间线上。视频本体不进你的长期空间。</p>
               <div className="hero-meta"><span>抽帧</span><i>·</i><span>ASR 听写</span><i>·</i><span>临时结果</span></div>
