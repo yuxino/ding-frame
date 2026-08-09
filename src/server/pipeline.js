@@ -42,6 +42,7 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onPr
 
   onProgress({ stage: "interpreting", percent: 82, detail: "把声音与画面放回同一条时间线。" });
   const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir });
+  result.hasSubtitles = Boolean(result.hasSubtitles || media.hasNativeSubtitles);
   await rm(audioDir, { recursive: true, force: true }).catch(() => undefined);
   return result;
 }

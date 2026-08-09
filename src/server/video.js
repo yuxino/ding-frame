@@ -22,7 +22,8 @@ export async function inspectVideo(inputPath) {
     width: parsed.streams?.find((stream) => stream.codec_type === "video")?.width || null,
     height: parsed.streams?.find((stream) => stream.codec_type === "video")?.height || null,
     hasVideo: parsed.streams?.some((stream) => stream.codec_type === "video") || false,
-    hasAudio: parsed.streams?.some((stream) => stream.codec_type === "audio") || false
+    hasAudio: parsed.streams?.some((stream) => stream.codec_type === "audio") || false,
+    hasNativeSubtitles: parsed.streams?.some((stream) => stream.codec_type === "subtitle") || false
   };
 }
 

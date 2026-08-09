@@ -39,7 +39,7 @@ describe("vision model result", () => {
   it("accepts fenced JSON and normalizes title, highlights, tags, and frame captions", () => {
     const result = normalizeVisionModelResult({
       raw: `\`\`\`json
-        {"title":"雪豹","summary":"丁真在自然场景中讲述雪豹。","tags":[{"label":"雪豹","category":"主体","atMs":"9000"},{"label":"雪豹","category":"主题","atMs":0},{"label":"户外","category":"场景","atMs":-2}],"highlights":[{"atMs":"9000","title":"雪豹出现","detail":"画面和人声在这里交汇。"}],"frameCaptions":[{"index":0,"caption":"山野中的人物"}]}
+        {"title":"雪豹","summary":"丁真在自然场景中讲述雪豹。","tags":[{"label":"雪豹","category":"主体","atMs":"9000"},{"label":"雪豹","category":"主题","atMs":0},{"label":"户外","category":"场景","atMs":-2}],"highlights":[{"atMs":"9000","title":"雪豹出现","detail":"画面和人声在这里交汇。"}],"frameCaptions":[{"index":0,"caption":"山野中的人物"}],"hasSubtitles":true}
       \`\`\``,
       fallbackTitle: "input.mp4",
       durationMs: 8000,
@@ -55,6 +55,7 @@ describe("vision model result", () => {
       { label: "户外", category: "场景", atMs: 0 }
     ]);
     expect(result.frames[0].caption).toBe("山野中的人物");
+    expect(result.hasSubtitles).toBe(true);
   });
 
   it("rejects a successful response that contains no JSON object", () => {

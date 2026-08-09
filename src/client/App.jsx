@@ -253,7 +253,7 @@ function ResultView({ job, onClear }) {
   const result = job.result;
   const [selectedFrame, setSelectedFrame] = useState(0);
   const [currentMs, setCurrentMs] = useState(0);
-  const [showSubtitles, setShowSubtitles] = useState(true);
+  const [showSubtitles, setShowSubtitles] = useState(false);
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -262,6 +262,12 @@ function ResultView({ job, onClear }) {
   }, [job.expiresAt]);
 
   const selected = result.frames[selectedFrame] || result.frames[0];
+
+  useEffect(() => {
+    // 视频本身没有字幕（无字幕轨、画面也没有烧录字幕）时，自动打开叠加字幕
+    setShowSubtitles(!result.hasSubtitles);
+  }, [result.hasSubtitles]);
+
   const activeSubtitle = showSubtitles
     ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs)
     : null;

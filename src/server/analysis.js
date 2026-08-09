@@ -24,6 +24,7 @@ export function localAnalysis({ title, durationMs, frames, transcript }) {
     ],
     highlights,
     transcript,
+    hasSubtitles: false,
     frames: frames.map((frame, index) => ({ ...frame, caption: index === 0 ? "进入这段视频的第一个画面" : `第 ${index + 1} 个视觉切片` }))
   };
 }
@@ -40,7 +41,7 @@ async function analyzeWithVisionModel({ title, durationMs, frames, transcript, f
   }));
   const frameContent = frameGroups.flat();
   const transcriptText = transcript.map((line) => `[${line.startMs}] ${line.text}`).join(" ").slice(0, 12000);
-  const prompt = `你在分析一段小视频。结合画面和听写理解真实内容，只返回一个 JSON 对象，不要 markdown：{"title":"不超过18字的内容标题","summary":"不超过80字的完整视频总结","tags":[{"label":"不超过8字","category":"主体|场景|动作|主题|氛围|形式","atMs":0}],"highlights":[{"atMs":0,"title":"不超过12字","detail":"不超过60字"}],"frameCaptions":[{"index":0,"caption":"不超过24字的画面描述"}]}。tags 给出 4 到 8 个最值得检索或回看的标签，atMs 必须参考相邻关键帧或听写的时间，是该内容首次明确出现的毫秒时间；只标声音或画面能够确认的内容，不推断人物身份、族群、疾病等敏感属性。每张图片前都标注了它在完整抽帧列表中的原始 index 和 atMs，frameCaptions.index 必须原样使用该原始 index。视频原始名称：${title}；时长毫秒：${durationMs}；听写：${transcriptText || "无可用听写"}`;
+  const prompt = `你在分析一段小视频。结合画面和听写理解真实内容，只返回一个 JSON 对象，不要 markdown：{"title":"不超过18字的内容标题","summary":"不超过80字的完整视频总结","tags":[{"label":"不超过8字","category":"主体|场景|动作|主题|氛围|形式","atMs":0}],"highlights":[{"atMs":0,"title":"不超过12字","detail":"不超过60字"}],"frameCaptions":[{"index":0,"caption":"不超过24字的画面描述"}],"hasSubtitles":true}。tags 给出 4 到 8 个最值得检索或回看的标签，atMs 必须参考相邻关键帧或听写的时间，是该内容首次明确出现的毫秒时间；只标声音或画面能够确认的内容，不推断人物身份、族群、疾病等敏感属性。每张图片前都标注了它在完整抽帧列表中的原始 index 和 atMs，frameCaptions.index 必须原样使用该原始 index。hasSubtitles 表示这些画面底部是否出现烧录字幕文字（画面里自带的中文字幕），出现了填 true，没有填 false，只能从画面证据判断。视频原始名称：${title}；时长毫秒：${durationMs}；听写：${transcriptText || "无可用听写"}`;
   const response = await fetch(`${config.visionBaseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${config.visionApiKey}`, "content-type": "application/json" },
@@ -126,6 +127,7 @@ export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, fra
     tags: tags.length ? tags : fallbackTags,
     highlights: highlights.length ? highlights : fallbackHighlights,
     transcript,
+    hasSubtitles: parsed.hasSubtitles === true,
     frames: normalizedFrames
   };
 }
