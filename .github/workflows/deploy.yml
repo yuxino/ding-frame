@@ -63,7 +63,7 @@ jobs:
         if: steps.deploy-secrets.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.0.3
         env:
-          APP_PORT: "3000"
+          APP_PORT: "3010"
           ASR_PROVIDER: ${{ secrets.ASR_PROVIDER }}
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           ASR_MODEL: ${{ secrets.ASR_MODEL }}

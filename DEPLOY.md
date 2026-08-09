@@ -2,7 +2,9 @@
 
 和 yuxino-labs 其他 API 项目同一套姿势：GitHub Actions 把代码推到阿里云服务器，pm2 托管，nginx 反代域名。
 
-架构：`dz.yuxino.cn → nginx(80/443) → 127.0.0.1:3000（pm2 里的 ding-frame）`
+架构：`dz.yuxino.cn → nginx(80/443) → 127.0.0.1:3010（pm2 里的 ding-frame）`
+
+> 端口说明：服务器上 3000 已被另一个服务（`myapp`）占用，盯帧固定跑 **3010**（本地开发也一直是 3010）。
 
 ## 一、GitHub Secrets
 
@@ -33,7 +35,7 @@ npm i -g pm2
 # 2. 装 nginx
 apt-get install -y nginx
 
-# 3. nginx 配置 dz.yuxino.cn 反代到 3000
+# 3. nginx 配置 dz.yuxino.cn 反代到 3010
 cat > /etc/nginx/sites-available/ding-frame <<'NGINX'
 server {
     listen 80;
@@ -42,7 +44,7 @@ server {
     client_max_body_size 600m;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3010;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
