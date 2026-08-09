@@ -49,6 +49,25 @@ export function parseDouyinPage(html) {
   return null;
 }
 
+
+// 从抖音链接里提取视频 ID 并转成分享页地址：
+// - www.douyin.com/jingxuan/search/...?modal_id=<id>（精选/搜索弹窗）
+// - www.douyin.com/video/<id>、www.iesdouyin.com/share/video/<id>
+// 分享页是服务端渲染，HTML 里带 _ROUTER_DATA，解析最稳。
+export function douyinShareUrl(value) {
+  try {
+    const parsed = new URL(value);
+    if (!isDouyinHost(parsed.hostname)) return null;
+    const modal = parsed.searchParams.get("modal_id");
+    if (modal && /^\d+$/.test(modal)) return `https://www.iesdouyin.com/share/video/${modal}`;
+    const pathMatch = parsed.pathname.match(/^\/(?:video|share\/video)\/(\d+)/);
+    if (pathMatch) return `https://www.iesdouyin.com/share/video/${pathMatch[1]}`;
+  } catch {
+    // 不是合法 URL 就交给后续逻辑
+  }
+  return null;
+}
+
 export async function resolveDouyinVideo(value, options = {}) {
   const { fetchImpl, timeoutMs, maxRedirects } = { ...defaultOptions, ...options };
   const headers = {
@@ -57,7 +76,7 @@ export async function resolveDouyinVideo(value, options = {}) {
     "accept-language": "zh-CN,zh;q=0.9",
     referer: "https://www.douyin.com/"
   };
-  let current = value;
+  let current = douyinShareUrl(value) || value;
   for (let attempt = 0; attempt < maxRedirects; attempt += 1) {
     const response = await fetchImpl(current, {
       redirect: "manual",

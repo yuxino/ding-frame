@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deWatermark,
+  douyinShareUrl,
   extractUrlFromText,
   looksLikeDouyinLink,
   parseDouyinPage,
@@ -47,6 +48,24 @@ describe("looksLikeDouyinLink", () => {
   it("rejects other hosts", () => {
     expect(looksLikeDouyinLink("https://www.bilibili.com/video/BV1xx")).toBe(false);
     expect(looksLikeDouyinLink("not a url")).toBe(false);
+  });
+});
+
+describe("douyinShareUrl", () => {
+  it("normalizes jingxuan/search modal_id links to the share page", () => {
+    const url = "https://www.douyin.com/jingxuan/search/%E6%8A%BD%E8%B1%A1%E8%A7%86%E9%A2%91?aid=abc&modal_id=7625447143519604002&type=general";
+    expect(douyinShareUrl(url)).toBe("https://www.iesdouyin.com/share/video/7625447143519604002");
+  });
+
+  it("normalizes video and share/video paths to the share page", () => {
+    expect(douyinShareUrl("https://www.douyin.com/video/123456")).toBe("https://www.iesdouyin.com/share/video/123456");
+    expect(douyinShareUrl("https://www.iesdouyin.com/share/video/123456")).toBe("https://www.iesdouyin.com/share/video/123456");
+  });
+
+  it("returns null for short links, notes and non-Douyin hosts", () => {
+    expect(douyinShareUrl("https://v.douyin.com/abc/")).toBeNull();
+    expect(douyinShareUrl("https://www.douyin.com/note/123")).toBeNull();
+    expect(douyinShareUrl("https://www.bilibili.com/video/BV1xx")).toBeNull();
   });
 });
 
@@ -129,6 +148,40 @@ describe("resolveDouyinVideo", () => {
     expect(resolved.url).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=v1");
     expect(resolved.title).toBe("标题");
     expect(resolved.source).toBe("douyin");
+  });
+
+  it("resolves jingxuan/search modal_id links via the share page", async () => {
+    const routerJson = JSON.stringify({
+      loaderData: {
+        "video_(id)/page": {
+          videoInfoRes: {
+            item_list: [
+              {
+                desc: "弹窗视频标题",
+                video: {
+                  play_addr: { url_list: ["https://aweme.snssdk.com/aweme/v1/playwm/?video_id=modal1"] }
+                }
+              }
+            ]
+          }
+        }
+      }
+    });
+    const fetched = [];
+    const fetchImpl = async (url) => {
+      fetched.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+        text: async () => `<script>window._ROUTER_DATA = ${routerJson}</script>`
+      };
+    };
+    const link = "https://www.douyin.com/jingxuan/search/x?modal_id=7625447143519604002";
+    const resolved = await resolveDouyinVideo(link, { fetchImpl });
+    expect(fetched[0]).toBe("https://www.iesdouyin.com/share/video/7625447143519604002");
+    expect(resolved.url).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=modal1");
+    expect(resolved.title).toBe("弹窗视频标题");
   });
 
   it("returns the URL directly when the response is already media", async () => {
