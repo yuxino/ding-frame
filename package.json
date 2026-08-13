@@ -1,9 +1,9 @@
 {
-  "name": "ding-frame",
+  "name": "koma",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Ephemeral small-video analysis with frame extraction and ASR.",
+  "description": "AI-powered video understanding with key frames, transcription, and highlights.",
   "scripts": {
     "dev": "concurrently -k \"tsx watch src/server/index.ts\" \"vite\"",
     "build": "npm run build:client && npm run build:server",
