@@ -1,6 +1,6 @@
 # Configuration
 
-Copy `.env.example` to `.env`. Most options are optional. Without model credentials, Ding Frame can run with mock analysis data.
+Copy `.env.example` to `.env`. Most options are optional. Without model credentials, Koma can run with mock analysis data.
 
 | Variable | Default | Description |
 | --- | --- | --- |
