@@ -105,8 +105,6 @@ export async function transcribeFullAudio({
   }
 }
 
-// 把词级时间戳聚合成字幕行：遇到句号/问号/感叹号，或停顿超过 1.5 秒，
-// 或单行超过 8 秒就换行，保证每行是能直接回看的一小段。
 export function groupWordsToSubtitles(words: Array<{ begin_time?: number; end_time?: number; text?: string; punctuation?: string }>, options: { maxLineMs?: number; minGapMs?: number; minLineMs?: number } = {}): TranscriptLine[] {
   const { maxLineMs = 8000, minGapMs = 1500, minLineMs = 1200 } = options;
   const lines: TranscriptLine[] = [];
@@ -148,7 +146,6 @@ export function groupWordsToSubtitles(words: Array<{ begin_time?: number; end_ti
   return lines;
 }
 
-// 同步 Fun-ASR-Flash：一次请求返回整段音频的词级时间戳（相对于切片起点）。
 export async function requestSegmentSubtitle({
   segment,
   apiKey,
@@ -195,7 +192,6 @@ export async function requestSegmentSubtitle({
   const body = await response.json().catch(() => ({})) as FunAsrSyncResponse;
   if (!response.ok) {
     const message = body.output?.message || (body as { message?: string }).message || (body as { code?: string }).code || `听写模型请求失败：${response.status}`;
-    // 这一整段没有可识别的人声（纯音乐/静音等），跳过而不是中断整个任务
     if (/ASR_RESPONSE_HAVE_NO_WORDS/.test(String(message))) return [];
     throw new Error(message);
   }
@@ -307,8 +303,8 @@ function mockTranscript(durationMs?: number): TranscriptLine[] {
   const duration = Math.max(1, durationMs || 30000);
   const snippets = [
     "这是一段临时演示听写，真实配置后会替换成视频里的声音。",
-    "盯帧把说话的内容和画面放回同一条时间线上。",
-    "你可以从几个关键瞬间开始回看，而不必重新看完整段视频。"
+    "Koma 会把说话内容和画面放回同一条时间线上。",
+    "你可以从关键瞬间开始回看，而不必重新观看完整视频。"
   ];
   return snippets.map((text, index) => {
     const startMs = Math.round((duration / snippets.length) * index);
