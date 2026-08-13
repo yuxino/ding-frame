@@ -109,7 +109,7 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
 
 function Brand() {
   return <div className="brand-lockup">
-    <img src="/ding-frame-icon-64.png" alt="" className="brand-icon" />
+    <img src="/koma-icon-64.png" alt="" className="brand-icon" />
     <div><strong>Koma</strong><span>KOMA</span></div>
   </div>;
 }
@@ -226,7 +226,7 @@ function App() {
             <form className="capture-card" onSubmit={startAnalysis}>
               <div className="capture-card-head">
                 <div><span>NEW ANALYSIS</span><h2>开始一次分析</h2></div>
-                <img src="/ding-frame-icon-64.png" alt="" />
+                <img src="/koma-icon-64.png" alt="" />
               </div>
               <div className="mode-switch" role="tablist" aria-label="视频来源">
                 <button className={mode === "upload" ? "selected" : ""} type="button" onClick={() => setMode("upload")}><Glyph name="upload" size={15} />本地视频</button>
@@ -281,7 +281,7 @@ function ProgressView({ job, progress, error, onClear }: { job: Job; progress: n
         <p>声音、画面和时间线正在临时空间里汇合。完成后会自动整理成可以点着回看的结果。</p>
       </div>
       <div className="progress-card">
-        <div className="progress-mascot"><img src="/ding-frame-icon.png" alt="" /></div>
+        <div className="progress-mascot"><img src="/koma-icon.png" alt="" /></div>
         <div className="progress-status"><span>{job.progress ? stageLabels[job.progress.stage as keyof typeof stageLabels] || "处理中" : "处理中"}</span><strong>{progress}%</strong></div>
         <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
         <p>{job.progress?.detail || "正在准备…"}</p>
@@ -434,7 +434,7 @@ function frameIndexAtTime(frames: Frame[], atMs: number): number {
 }
 
 function InfoModal({ onClose }: { onClose: () => void }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><img src="/ding-frame-icon-64.png" alt="" /><span className="page-label">ABOUT KOMA</span><h2 id="info-title">AI 视频理解工作台</h2><p>视频会暂存在服务端，用于抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起删除。</p><p className="modal-muted">配置百炼 API Key 后即可使用真实 ASR 与视觉分析；没有配置时会使用演示数据运行完整流程。</p><button className="primary-button" type="button" onClick={onClose}>知道了<Glyph name="arrow" size={17} /></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><img src="/koma-icon-64.png" alt="" /><span className="page-label">ABOUT KOMA</span><h2 id="info-title">AI 视频理解工作台</h2><p>视频会暂存在服务端，用于抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起删除。</p><p className="modal-muted">配置百炼 API Key 后即可使用真实 ASR 与视觉分析；没有配置时会使用演示数据运行完整流程。</p><button className="primary-button" type="button" onClick={onClose}>知道了<Glyph name="arrow" size={17} /></button></div></div>;
 }
 
 export default App;
