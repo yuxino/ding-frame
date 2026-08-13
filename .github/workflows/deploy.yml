@@ -1,4 +1,4 @@
-name: Deploy and Restart ding-frame
+name: Deploy Koma
 
 on:
   push:
@@ -59,7 +59,7 @@ jobs:
           target: ${{ steps.deploy-meta.outputs.deploy_target }}
           strip_components: 0
 
-      - name: Restart ding-frame with pm2
+      - name: Restart Koma with pm2
         if: steps.deploy-secrets.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -91,5 +91,6 @@ jobs:
             EOF
             chmod 600 .env
             pm2 delete ding-frame 2>/dev/null || true
-            pm2 start dist-server/index.js --name ding-frame
+            pm2 delete koma 2>/dev/null || true
+            pm2 start dist-server/index.js --name koma
             pm2 save
