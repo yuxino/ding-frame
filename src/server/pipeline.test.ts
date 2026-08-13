@@ -28,7 +28,7 @@ function runFfmpeg(args) {
 }
 
 beforeAll(async () => {
-  const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-pipeline-test-"));
+  const dir = await mkdtemp(join(os.tmpdir(), "koma-pipeline-test-"));
   tempDirs.push(dir);
   videoPath = join(dir, "sample.mp4");
   audioOnlyPath = join(dir, "audio-only.mp3");
@@ -51,7 +51,7 @@ afterAll(async () => {
 
 describe("media analysis pipeline", () => {
   it("produces a timeline result and removes intermediate audio", async () => {
-    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-pipeline-run-"));
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-pipeline-run-"));
     tempDirs.push(dir);
     const framesDir = join(dir, "frames");
     const audioDir = join(dir, "audio");
@@ -80,7 +80,7 @@ describe("media analysis pipeline", () => {
   });
 
   it("rejects files without a video stream with a friendly message", async () => {
-    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-pipeline-run-"));
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-pipeline-run-"));
     tempDirs.push(dir);
     await expect(analyzeMedia({
       inputPath: audioOnlyPath,
