@@ -110,7 +110,7 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
 function Brand() {
   return <div className="brand-lockup">
     <img src="/ding-frame-icon-64.png" alt="" className="brand-icon" />
-    <div><strong>盯帧</strong><span>DINGFRAME</span></div>
+    <div><strong>Koma</strong><span>KOMA</span></div>
   </div>;
 }
 
@@ -213,13 +213,13 @@ function App() {
         {!job && (
           <section className="landing-layout">
             <div className="hero-copy">
-              <div className="hero-badge"><span />小视频分析，不留库存</div>
-              <h1>一眼盯帧，<br />鉴定为：<br /><span className="slogan-verdict">纯纯的干货。</span></h1>
-              <p>放进一段小视频。盯帧会抽出关键画面、听写人声、标出重点，再给你一份能直接回看的总结。</p>
+              <div className="hero-badge"><span />AI 视频理解</div>
+              <h1>看懂一段视频，<br />从关键画面开始。</h1>
+              <p>放入一段视频。Koma 会提取关键画面、转写语音、标出重点，并整理成一份可以直接回看的总结。</p>
               <div className="feature-row">
-                <div><Glyph name="frame" /><span><strong>抽关键帧</strong><small>看清发生了什么</small></span></div>
-                <div><Glyph name="voice" /><span><strong>逐句字幕</strong><small>听清说了什么</small></span></div>
-                <div><Glyph name="clock" /><span><strong>阅后即焚</strong><small>不占长期空间</small></span></div>
+                <div><Glyph name="frame" /><span><strong>关键帧</strong><small>快速理解画面</small></span></div>
+                <div><Glyph name="voice" /><span><strong>逐句字幕</strong><small>准确定位内容</small></span></div>
+                <div><Glyph name="clock" /><span><strong>自动清理</strong><small>不长期保存视频</small></span></div>
               </div>
             </div>
 
@@ -331,7 +331,6 @@ function ResultView({ job, onClear, onRestart }: { job: Job; onClear: () => void
   const selected = result.frames[selectedFrame] || result.frames[0];
 
   useEffect(() => {
-    // 视频本身没有字幕（无字幕轨、画面也没有烧录字幕）时，自动打开叠加字幕
     setShowSubtitles(!result.hasSubtitles);
   }, [result.hasSubtitles]);
 
@@ -435,7 +434,7 @@ function frameIndexAtTime(frames: Frame[], atMs: number): number {
 }
 
 function InfoModal({ onClose }: { onClose: () => void }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><img src="/ding-frame-icon-64.png" alt="" /><span className="page-label">ABOUT DINGFRAME</span><h2 id="info-title">只留下看懂的结果。</h2><p>视频会暂存在服务端，用来抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起消失。</p><p className="modal-muted">无需 Bucket。配置百炼 API Key 后即可使用真实 ASR 与视觉分析；没有配置时会用演示数据跑完整流程。</p><button className="primary-button" type="button" onClick={onClose}>知道了<Glyph name="arrow" size={17} /></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label="关闭">×</button><img src="/ding-frame-icon-64.png" alt="" /><span className="page-label">ABOUT KOMA</span><h2 id="info-title">AI 视频理解工作台</h2><p>视频会暂存在服务端，用于抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起删除。</p><p className="modal-muted">配置百炼 API Key 后即可使用真实 ASR 与视觉分析；没有配置时会使用演示数据运行完整流程。</p><button className="primary-button" type="button" onClick={onClose}>知道了<Glyph name="arrow" size={17} /></button></div></div>;
 }
 
 export default App;
