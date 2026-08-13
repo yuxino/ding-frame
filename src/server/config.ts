@@ -50,10 +50,10 @@ export const config = {
 } as const;
 
 if (config.asrProvider === "mock" && requestedAsrProvider === "dashscope") {
-  console.warn("[ding-frame] 已声明 ASR_PROVIDER=dashscope 但缺少 DASHSCOPE_API_KEY，自动改用演示听写。");
+  console.warn("[koma] 已声明 ASR_PROVIDER=dashscope 但缺少 DASHSCOPE_API_KEY，自动改用演示听写。");
 }
 if (config.analysisProvider === "mock" && requestedAnalysisProvider === "openai-compatible") {
-  console.warn("[ding-frame] 已声明 ANALYSIS_PROVIDER=openai-compatible 但缺少可用 API Key，自动改用演示画面分析。");
+  console.warn("[koma] 已声明 ANALYSIS_PROVIDER=openai-compatible 但缺少可用 API Key，自动改用演示画面分析。");
 }
 
 export function asrIsConfigured(): boolean {
