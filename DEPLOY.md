@@ -2,7 +2,7 @@
 
 Koma can be deployed to a regular Linux server with GitHub Actions, PM2, and nginx.
 
-Current setup: `dz.yuxino.cn → nginx → 127.0.0.1:3010 → Koma`.
+Current setup: `koma.yuxino.cn → nginx → 127.0.0.1:3010 → Koma`.
 
 ## GitHub Secrets
 
@@ -35,7 +35,7 @@ Example nginx configuration:
 ```nginx
 server {
     listen 80;
-    server_name dz.yuxino.cn;
+    server_name koma.yuxino.cn;
 
     client_max_body_size 600m;
 
@@ -71,7 +71,7 @@ pm2 save
 ## Verify
 
 ```bash
-curl http://dz.yuxino.cn/api/health
+curl http://koma.yuxino.cn/api/health
 pm2 status
 pm2 logs koma
 ```
