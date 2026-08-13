@@ -17,7 +17,7 @@ import { parseByteRange } from "./video-stream.js";
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
 
-app.get("/api/health", async () => ({ ok: true, service: "ding-frame", asrProvider: config.asrProvider, analysisProvider: config.analysisProvider, configured: { asr: asrIsConfigured(), analysis: analysisIsConfigured() }, mock: { asr: config.asrProvider === "mock", analysis: config.analysisProvider === "mock" } }));
+app.get("/api/health", async () => ({ ok: true, service: "koma", asrProvider: config.asrProvider, analysisProvider: config.analysisProvider, configured: { asr: asrIsConfigured(), analysis: analysisIsConfigured() }, mock: { asr: config.asrProvider === "mock", analysis: config.analysisProvider === "mock" } }));
 
 app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
@@ -49,7 +49,6 @@ app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply
     job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址" });
     job.sourceUrl = url;
     updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
-    // 解析与下载放进后台任务，立即返回任务编号，前端马上进入进度页
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
@@ -85,7 +84,6 @@ app.get("/api/jobs/:id/frames/:filename", async (request: FastifyRequest<{ Param
   }
 });
 
-// 说话人分离时把整段音频临时挂在公网地址上，交给百炼异步转写回源；只允许读取已登记的本机文件。
 app.get("/api/temp/:token", async (request: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
   const filePath = getTempAudio(request.params.token);
   if (!filePath) return reply.code(404).send({ error: "这个临时文件已经消失了。" });
