@@ -16,7 +16,7 @@ describe("Fun-ASR subtitle adapter", () => {
   });
 
   it("sends a base64 MP3 to the native multimodal endpoint and returns sentence lines", async () => {
-    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-asr-test-"));
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-asr-test-"));
     tempDirs.push(dir);
     const path = join(dir, "segment-000.mp3");
     await writeFile(path, Buffer.from([0x49, 0x44, 0x33, 0x04]));
@@ -59,7 +59,7 @@ describe("Fun-ASR subtitle adapter", () => {
   });
 
   it("adds the segment offset back onto subtitle lines", async () => {
-    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-asr-test-"));
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-asr-test-"));
     tempDirs.push(dir);
     const path = join(dir, "segment-000.mp3");
     await writeFile(path, "audio");
@@ -81,7 +81,7 @@ describe("Fun-ASR subtitle adapter", () => {
   });
 
   it("falls back to one line when the model returns no word timestamps", async () => {
-    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-asr-test-"));
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-asr-test-"));
     tempDirs.push(dir);
     const path = join(dir, "segment-000.mp3");
     await writeFile(path, "audio");
@@ -100,7 +100,7 @@ describe("Fun-ASR subtitle adapter", () => {
   });
 
   it("surfaces the provider error without leaking the API key", async () => {
-    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-asr-test-"));
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-asr-test-"));
     tempDirs.push(dir);
     const path = join(dir, "segment-000.mp3");
     await writeFile(path, "audio");
@@ -194,7 +194,7 @@ describe("no-speech segments", () => {
     const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const os = await import("node:os");
-    const dir = await mkdtemp(join(os.tmpdir(), "ding-frame-asr-nospeech-"));
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-asr-nospeech-"));
     try {
       const path = join(dir, "segment-006.mp3");
       await writeFile(path, "audio");
