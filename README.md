@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/ding-frame-icon.png" width="112" alt="Koma icon">
+  <img src="public/koma-icon.png" width="112" alt="Koma icon">
   <h1>Koma</h1>
   <p>AI-powered video understanding.</p>
   <p>
