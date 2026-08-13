@@ -1,10 +1,10 @@
-# Ding Frame
+# Koma
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A lightweight workspace for short video analysis.
+AI-powered video understanding.
 
-Upload a video or paste a URL. Ding Frame extracts key frames, transcribes speech, and uses AI to summarize the video and identify important moments on a single timeline.
+Upload a video or paste a URL. Koma extracts key frames, transcribes speech, and uses AI to summarize the video and identify important moments on a single timeline.
 
 ## Features
 
