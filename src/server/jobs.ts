@@ -61,7 +61,7 @@ const jobs = new Map<string, Job>();
 
 export async function createJob({ source, title }: { source: Job["source"]; title: string }): Promise<Job> {
   const id = randomUUID();
-  const dir = join(config.tempRoot, `ding-frame-${id}`);
+  const dir = join(config.tempRoot, `koma-${id}`);
   await mkdir(dir, { recursive: true });
   const now = Date.now();
   const job: Job = {
