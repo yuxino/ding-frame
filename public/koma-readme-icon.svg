@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <defs>
-    <clipPath id="rounded">
-      <rect width="512" height="512" rx="144" ry="144" />
-    </clipPath>
-  </defs>
-  <image href="koma-icon.png" width="512" height="512" clip-path="url(#rounded)" />
-</svg>
