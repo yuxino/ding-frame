@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/koma-icon.png" width="112" alt="Koma icon">
+  <img src="public/koma-readme-icon.svg" width="112" alt="Koma icon">
   <h1>Koma</h1>
   <p>AI 视频理解工具。</p>
   <p>
