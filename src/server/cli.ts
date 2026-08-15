@@ -8,6 +8,7 @@ import { basename, join, resolve } from "node:path";
 import { config } from "./config.js";
 import { downloadUrl } from "./download.js";
 import { analyzeMedia } from "./pipeline.js";
+import { resolveVideoUrl } from "./resolver.js";
 
 const HELP = `Koma CLI
 
@@ -73,9 +74,13 @@ async function main(): Promise<void> {
 async function prepareInput(input: string, tempDir: string): Promise<string> {
   if (/^https?:\/\//i.test(input)) {
     const outputPath = join(tempDir, "input.mp4");
-    console.error(`[koma] Downloading ${input}`);
+    // 分享链接（抖音/B站等）先解析成真实播放地址，直链原样使用
+    console.error(`[koma] Resolving ${input}`);
+    const resolved = await resolveVideoUrl(input);
+    if (resolved.title) console.error(`[koma] Title: ${resolved.title}`);
+    console.error(`[koma] Downloading ${resolved.url}`);
     // 复用 HTTP 服务的下载逻辑：自带时长预检、取消支持和重试
-    await downloadUrl(input, outputPath);
+    await downloadUrl(resolved.url, outputPath, { referer: resolved.referer });
     return outputPath;
   }
   const inputPath = resolve(input);
