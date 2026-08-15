@@ -43,6 +43,9 @@ export const config = {
   // 喂给视觉模型的听写文本上限（字符）。过长时保留头尾、中间省略，
   // 保证长视频的开场和结尾口述内容不丢。
   visionTranscriptChars: integerEnv("VISION_TRANSCRIPT_CHARS", 30000),
+  // 视觉模型输出上限（tokens）。章节总结的 summary 各两三句，输出量远大于
+  // 旧版 highlight，上限太低会导致 JSON 被截断而解析失败。
+  visionMaxTokens: integerEnv("VISION_MAX_TOKENS", 2000),
   // 同时执行的分析任务数上限：ffmpeg 抽帧/转码和 ASR 都吃资源，
   // 超出的任务排队等待，避免几个大视频同时上传把服务拖垮。
   maxConcurrentJobs: integerEnv("MAX_CONCURRENT_JOBS", 2),

@@ -19,6 +19,7 @@
 | `MAX_FRAMES` | `18` | 关键帧数量上限（场景帧 + 均匀补足帧） |
 | `VISION_MAX_FRAMES` | `10` | 每次分析交给视觉模型理解的代表帧数上限 |
 | `VISION_TRANSCRIPT_CHARS` | `30000` | 喂给视觉模型的听写文本上限（字符）；过长时保留头尾、中间省略 |
+| `VISION_MAX_TOKENS` | `2000` | 视觉模型输出上限（tokens）；太低会导致章节 JSON 被截断 |
 | `MAX_CONCURRENT_JOBS` | `2` | 同时运行的分析任务数上限，超出的任务排队等待 |
 | `RESULT_TTL_SECONDS` | `1200` | 分析结果保留时间（20 分钟） |
 

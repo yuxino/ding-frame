@@ -19,6 +19,7 @@ Copy `.env.example` to `.env`. Most options are optional. Without model credenti
 | `MAX_FRAMES` | `18` | Maximum key frames (scene frames + uniform fill) |
 | `VISION_MAX_FRAMES` | `10` | Representative frames sent to the vision model per analysis |
 | `VISION_TRANSCRIPT_CHARS` | `30000` | Transcript chars sent to the vision model; head and tail are kept when too long |
+| `VISION_MAX_TOKENS` | `2000` | Vision model output limit (tokens); too low truncates the chapter JSON |
 | `MAX_CONCURRENT_JOBS` | `2` | Maximum analyses running at the same time; extra jobs queue up |
 | `RESULT_TTL_SECONDS` | `1200` | Result retention time (20 minutes) |
 

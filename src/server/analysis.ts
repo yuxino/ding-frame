@@ -18,7 +18,15 @@ interface AnalyzeInput {
 export async function analyze({ title, durationMs, frames, transcript, framesDir, signal, language = "zh" }: AnalyzeInput): Promise<AnalysisResult> {
   if (config.analysisProvider === "mock") return localAnalysis({ title, durationMs, frames, transcript, language });
   if (config.analysisProvider !== "openai-compatible") throw new Error(`未知的 ANALYSIS_PROVIDER：${config.analysisProvider}`);
-  return analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language });
+  // 视觉模型偶发返回非 JSON（安全拒绝、闲聊开头等），重试一次能显著降低失败率。
+  try {
+    return await analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("有效 JSON") && !signal?.aborted) {
+      return await analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language });
+    }
+    throw error;
+  }
 }
 
 // 文案提示词按界面语言选择；中英文都要求 JSON 字段本身不变，只是文本内容用对应语言。
@@ -104,7 +112,7 @@ async function analyzeWithVisionModel({ title, durationMs, frames, transcript, f
   const response = await fetch(`${config.visionBaseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${config.visionApiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: config.visionModel, temperature: 0.2, max_tokens: 1000, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
+    body: JSON.stringify({ model: config.visionModel, temperature: 0.2, max_tokens: config.visionMaxTokens, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(config.dashscopeTimeoutMs)]) : AbortSignal.timeout(config.dashscopeTimeoutMs)
   });
   const body = await response.json().catch(() => ({})) as { error?: { message?: string }; message?: string; choices?: Array<{ message?: { content?: unknown } }> };
@@ -137,23 +145,7 @@ export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, fra
   const rawText = typeof raw === "string"
     ? raw
     : Array.isArray(raw) ? raw.map((item) => (item as { text?: string })?.text || "").join("") : "";
-  const firstBrace = rawText.indexOf("{");
-  const lastBrace = rawText.lastIndexOf("}");
-  if (firstBrace < 0 || lastBrace <= firstBrace) throw new Error("画面模型没有返回有效 JSON，请重试。");
-
-  let parsed: {
-    title?: unknown;
-    summary?: unknown;
-    tags?: unknown;
-    chapters?: unknown;
-    frameCaptions?: unknown;
-    hasSubtitles?: unknown;
-  };
-  try {
-    parsed = JSON.parse(rawText.slice(firstBrace, lastBrace + 1));
-  } catch {
-    throw new Error("画面模型没有返回有效 JSON，请重试。");
-  }
+  const parsed = parseModelJson(rawText);
 
   const captions = new Map<number, string>();
   if (Array.isArray(parsed.frameCaptions)) {
@@ -230,6 +222,44 @@ export function normalizeChapters(raw: unknown, durationMs: number, transcript: 
 function cleanText(value: unknown, fallback: string, maxLength: number): string {
   const text = typeof value === "string" ? value.trim() : "";
   return (text || fallback).slice(0, maxLength);
+}
+
+interface ParsedModelJson {
+  title?: unknown;
+  summary?: unknown;
+  tags?: unknown;
+  chapters?: unknown;
+  frameCaptions?: unknown;
+  hasSubtitles?: unknown;
+}
+
+// 解析视觉模型的输出。模型可能：把 JSON 包在 markdown 代码块里、开头带闲聊、
+// 或因为输出 token 上限被截断（字符串未闭合、对象/数组缺闭合符）。
+// 策略：对每个候选基底（完整尾部、补字符串引号、最后一个 } 处），
+// 依次尝试补 0~2 层闭合符（}、]}），取第一个能解析成功的。
+export function parseModelJson(rawText: string): ParsedModelJson {
+  const firstBrace = rawText.indexOf("{");
+  if (firstBrace < 0) throw new Error("画面模型没有返回有效 JSON，请重试。");
+  const tail = rawText.slice(firstBrace);
+
+  // 候选基底按“内容尽量完整”排序
+  const bases: string[] = [tail];
+  // 截断常发生在字符串值中间：补一个引号再尝试
+  if (!tail.endsWith('"')) bases.push(`${tail}"`);
+  const lastBrace = tail.lastIndexOf("}");
+  if (lastBrace > 0) bases.push(tail.slice(0, lastBrace + 1));
+
+  for (const base of bases) {
+    // 依次尝试补 0~3 层闭合符：} 、]} 、}]}（对象/数组/数组内对象被截断时）
+    for (const close of ["", "}", "]}", "}]}"]) {
+      try {
+        return JSON.parse(base + close) as ParsedModelJson;
+      } catch {
+        // 试下一个组合
+      }
+    }
+  }
+  throw new Error("画面模型没有返回有效 JSON，请重试。");
 }
 
 // 听写文本过长时保留头尾、中间省略：视频的开场和结尾通常信息密度最高，

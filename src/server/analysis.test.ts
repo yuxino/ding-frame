@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fallbackChapters, localAnalysis, normalizeChapters, normalizeVisionModelResult, selectRepresentativeFrames, truncateTranscript } from "./analysis.js";
+import { fallbackChapters, localAnalysis, normalizeChapters, normalizeVisionModelResult, parseModelJson, selectRepresentativeFrames, truncateTranscript } from "./analysis.js";
 
 describe("local analysis", () => {
   it("keeps transcript and frames aligned in a readable result", async () => {
@@ -179,5 +179,46 @@ describe("truncateTranscript", () => {
     expect(headCount).toBeLessThanOrEqual(61);
     expect(tailCount).toBeGreaterThanOrEqual(39);
     expect(tailCount).toBeLessThanOrEqual(41);
+  });
+});
+
+describe("parseModelJson", () => {
+  it("parses a plain JSON object", () => {
+    const parsed = parseModelJson('{"title":"雪豹","hasSubtitles":true}');
+    expect(parsed.title).toBe("雪豹");
+    expect(parsed.hasSubtitles).toBe(true);
+  });
+
+  it("strips markdown code fences and surrounding chatter", () => {
+    const parsed = parseModelJson("好的，我来分析：```json\n{\"title\":\"雪豹\"}\n```");
+    expect(parsed.title).toBe("雪豹");
+  });
+
+  it("recovers a truncated JSON by dropping the last incomplete field", () => {
+    // 模拟 max_tokens 截断：最后一个字符串没闭合，但前面的字段完整
+    const raw = '{"title":"雪豹","summary":"一段总结","chapters":[{"startMs":0,"endMs":5000,"title":"开场","summary":"这一段讲';
+    const parsed = parseModelJson(raw);
+    expect(parsed.title).toBe("雪豹");
+    expect(parsed.summary).toBe("一段总结");
+    expect(Array.isArray(parsed.chapters)).toBe(true);
+    expect(parsed.chapters).toHaveLength(1);
+    expect((parsed.chapters[0] as { title: string }).title).toBe("开场");
+  });
+
+  it("recovers when a nested object is cut mid-way", () => {
+    const raw = '{"title":"t","chapters":[{"startMs":0,"endMs":100,"title":"a"},{"startMs":200,';
+    const parsed = parseModelJson(raw);
+    expect(parsed.title).toBe("t");
+    expect(parsed.chapters).toHaveLength(1);
+  });
+
+  it("recovers when the tail has chatter after the JSON", () => {
+    const parsed = parseModelJson('{"title":"雪豹"}以上就是我的分析，希望有帮助。');
+    expect(parsed.title).toBe("雪豹");
+  });
+
+  it("throws when there is no usable JSON at all", () => {
+    expect(() => parseModelJson("我看完了，但这次没有按格式返回。")).toThrow("有效 JSON");
+    expect(() => parseModelJson("")).toThrow("有效 JSON");
   });
 });
