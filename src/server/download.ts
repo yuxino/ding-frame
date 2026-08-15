@@ -4,7 +4,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
 import { headersForVideoUrl } from "./url-source.js";
-import { inspectVideo } from "./video.js";
+import { inspectVideo, probeRemoteVideoDuration } from "./video.js";
 
 export interface DownloadResult {
   contentType: string;
@@ -19,6 +19,14 @@ export async function downloadUrl(
   outputPath: string,
   { referer, signal, onProgress }: { referer?: string; signal?: AbortSignal; onProgress?: ProgressCallback } = {}
 ): Promise<DownloadResult> {
+  // 下载前先探测时长：faststart 视频用 Range 请求就能拿到元数据，
+  // 超长直接拒绝，避免把整段视频拉下来才发现超时。
+  const probeHeaders = { ...headersForVideoUrl(url), ...(referer ? { referer } : {}) };
+  const probedMs = await probeRemoteVideoDuration(url, probeHeaders, { signal });
+  if (probedMs !== null && probedMs > config.maxDurationSeconds * 1000) {
+    throw new Error(`视频太长了，第一版最多支持 ${Math.round(config.maxDurationSeconds / 60)} 分钟。`);
+  }
+
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {

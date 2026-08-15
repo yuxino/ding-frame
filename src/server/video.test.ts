@@ -1,5 +1,45 @@
-import { describe, expect, it } from "vitest";
-import { createAudioSegmentMetadata, parseShowinfoTimes, runCommand } from "./video.js";
+import { createReadStream, readFileSync, statSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import os from "node:os";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import ffmpegStatic from "ffmpeg-static";
+import { createAudioSegmentMetadata, parseShowinfoTimes, probeRemoteVideoDuration, runCommand } from "./video.js";
+
+const tempDirs: string[] = [];
+let probeVideoPath = "";
+
+function runFfmpeg(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffmpegStatic, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) return resolve();
+      reject(new Error(stderr.trim() || `ffmpeg 退出码 ${code}`));
+    });
+  });
+}
+
+beforeAll(async () => {
+  const dir = await mkdtemp(join(os.tmpdir(), "koma-video-test-"));
+  tempDirs.push(dir);
+  probeVideoPath = join(dir, "probe.mp4");
+  // faststart 让 moov 在文件开头，远程探测只需要 Range 拉元数据
+  await runFfmpeg([
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=10",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p",
+    "-movflags", "+faststart", probeVideoPath
+  ]);
+}, 30_000);
+
+afterAll(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 describe("command runner", () => {
   it("returns stdout from a successful process", async () => {
@@ -18,6 +58,80 @@ describe("command runner", () => {
     controller.abort();
     await expect(run).rejects.toMatchObject({ name: "AbortError" });
   }, 10_000);
+});
+
+describe("remote duration probe", () => {
+  // 本地服务器：支持 Range 请求，并记录每次请求实际传输的字节数
+  function startVideoServer(filePath: string): Promise<{ port: number; transferred: () => number; close: () => void }> {
+    const size = statSync(filePath).size;
+    let transferredBytes = 0;
+    const server = createServer((req, res) => {
+      const range = req.headers.range;
+      if (range) {
+        const match = range.match(/bytes=(\d+)-(\d*)/);
+        const start = Number(match?.[1] || 0);
+        // 越界 Range 按真实 CDN 行为 clamp 到文件末尾
+        const end = Math.min(match?.[2] ? Number(match[2]) : size - 1, size - 1);
+        res.writeHead(206, {
+          "content-range": `bytes ${start}-${end}/${size}`,
+          "content-length": end - start + 1,
+          "content-type": "video/mp4"
+        });
+        const stream = createReadStream(filePath, { start, end });
+        stream.on("data", (chunk) => { transferredBytes += chunk.length; });
+        stream.pipe(res);
+      } else {
+        res.writeHead(200, { "content-length": size, "content-type": "video/mp4" });
+        const stream = createReadStream(filePath);
+        stream.on("data", (chunk) => { transferredBytes += chunk.length; });
+        stream.pipe(res);
+      }
+    });
+    return new Promise((resolve) => {
+      server.listen(0, () => {
+        const address = server.address() as { port: number };
+        resolve({
+          port: address.port,
+          transferred: () => transferredBytes,
+          close: () => server.close()
+        });
+      });
+    });
+  }
+
+  it("reads the duration from the head bytes over Range without downloading the whole file", async () => {
+    const server = await startVideoServer(probeVideoPath);
+    try {
+      const durationMs = await probeRemoteVideoDuration(`http://127.0.0.1:${server.port}/probe.mp4`, {});
+      // 3 秒视频：允许 ±500ms 的容器时间戳误差
+      expect(durationMs).toBeGreaterThan(2500);
+      expect(durationMs).toBeLessThan(3500);
+      // 视频本身只有几十 KB，探测应该只拉了头部（远小于 4MB 上限即视为通过）
+      expect(server.transferred()).toBeLessThan(1024 * 1024);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("returns null when the server is unreachable", async () => {
+    const durationMs = await probeRemoteVideoDuration("http://127.0.0.1:1/unreachable.mp4", {}, { timeoutMs: 3000 });
+    expect(durationMs).toBeNull();
+  });
+
+  it("returns null for a non-video response", async () => {
+    const server = createServer((_req, res) => {
+      res.setHeader("content-type", "text/plain");
+      res.end("not a video");
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    try {
+      const address = server.address() as { port: number };
+      const durationMs = await probeRemoteVideoDuration(`http://127.0.0.1:${address.port}/x`, {});
+      expect(durationMs).toBeNull();
+    } finally {
+      server.close();
+    }
+  });
 });
 
 describe("audio segment timeline", () => {
