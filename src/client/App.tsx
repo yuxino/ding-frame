@@ -313,13 +313,20 @@ function App() {
   }
 
   async function purgeJob() { if (!job?.id) return; await fetch(`/api/jobs/${job.id}`, { method: "DELETE" }); setJob(null); setFile(null); setUrl(""); }
-  async function restartAnalysis() { await purgeJob(); window.scrollTo({ top: 0, behavior: "smooth" }); window.setTimeout(() => urlInputRef.current?.focus(), 250); }
+  async function restartAnalysis() { await purgeJob(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  // 回到 landing 后把焦点放到 URL 输入框（结果页点“重新开始”时），
+  // 用 effect 而不是 setTimeout 猜渲染时机。
+  const wasInResult = useRef(false);
+  useEffect(() => {
+    if (wasInResult.current && !job) urlInputRef.current?.focus();
+    wasInResult.current = Boolean(job);
+  }, [job]);
   // 点 Logo 回到首页：清掉当前任务视图但不删除服务端数据（让它按 TTL 自然清理）。
   function goHome() { setJob(null); setError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
 
   return <div className="app-shell">
-    <header className="site-header"><div className="header-inner"><Brand onClick={goHome} label={t.backHome} /><div className="header-actions">
+    <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
       <span className="privacy-pill"><i />{t.privacy}</span>
       <button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
       <button className="header-button" type="button" onClick={() => setShowSettings(true)}><Glyph name="info" size={16} />{t.help}</button>
@@ -409,13 +416,17 @@ function frameIndexAtTime(frames: Frame[], atMs: number): number { let nearest =
 function InfoModal({ onClose, language }: { onClose: () => void; language: Language }) {
   const t = copy[language];
   const closeRef = useRef<HTMLButtonElement>(null);
-  // 打开时聚焦关闭按钮，支持 Escape 关闭，关闭后焦点留在触发位置由浏览器还原。
+  // onClose 是父组件内联箭头函数，每次渲染引用都会变；
+  // 用 ref 存最新值，effect 只在挂载时跑一次（聚焦 + 监听 Escape），
+  // 避免父组件重渲染时焦点被反复抢回关闭按钮。
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     closeRef.current?.focus();
-    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, []);
   return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button><img src="/koma-icon-64.png" alt="" /><span className="page-label">ABOUT KOMA</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
 }
 
