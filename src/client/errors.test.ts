@@ -12,6 +12,14 @@ describe("translateServerError", () => {
     expect(translateServerError("这次分析已经消失了。", "en")).toBe("This analysis is no longer available.");
   });
 
+  it("maps speaker diarization errors to English", () => {
+    expect(translateServerError("听写任务提交失败：401", "en")).toBe("Transcription failed. Please try again.");
+    expect(translateServerError("听写任务失败：音频无法下载", "en")).toBe("Transcription failed. Please try again.");
+    expect(translateServerError("听写任务没有返回任务编号。", "en")).toBe("The transcription service did not return a task id.");
+    expect(translateServerError("听写结果下载失败：500", "en")).toBe("Could not download the transcription result. Please try again.");
+    expect(translateServerError("说话人分离需要配置 PUBLIC_BASE_URL（服务的公网地址）。", "en")).toContain("PUBLIC_BASE_URL");
+  });
+
   it("falls back to a generic English message for unknown errors", () => {
     expect(translateServerError("某种未收录的错误", "en")).toBe("Something went wrong. Please try again.");
   });

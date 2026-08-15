@@ -59,14 +59,17 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, sign
   if (media.hasAudio) {
     if (config.asrDiarization && config.asrProvider === "dashscope") {
       onProgress({ stage: "transcribing", percent: 60, detail: "正在做说话人分离与听写。" });
-      transcript = await transcribeFullAudio({ inputPath, audioDir, publicBaseUrl: config.publicBaseUrl, signal });
+      try {
+        transcript = await transcribeFullAudio({ inputPath, audioDir, publicBaseUrl: config.publicBaseUrl, signal });
+      } catch (error) {
+        // 说话人分离只是给字幕加“说话人”标签的增强：它依赖公网地址和百炼异步任务，
+        // 失败时降级为普通分段听写，保证字幕和总结仍然可用，而不是让整个分析失败。
+        if (signal?.aborted) throw error;
+        console.warn(`[koma] 说话人分离失败，降级为普通听写：${error instanceof Error ? error.message : String(error)}`);
+        transcript = await transcribeSegments(inputPath, audioDir, media.durationMs, signal, onProgress);
+      }
     } else {
-      const audioSegments = await extractAudioSegments(inputPath, audioDir, media.durationMs, { signal });
-      throwIfAborted(signal);
-      onProgress({ stage: "transcribing", percent: 65, detail: config.asrProvider === "mock" ? "演示听写正在生成。" : "Fun-ASR 正在生成逐句字幕。" });
-      transcript = audioSegments.length
-        ? await transcribe({ audioSegments, durationMs: media.durationMs, signal })
-        : [];
+      transcript = await transcribeSegments(inputPath, audioDir, media.durationMs, signal, onProgress);
     }
   } else {
     onProgress({ stage: "transcribing", percent: 65, detail: "视频没有声音，继续理解画面。" });
@@ -78,6 +81,20 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, sign
   result.hasSubtitles = Boolean(result.hasSubtitles || media.hasNativeSubtitles);
   await rm(audioDir, { recursive: true, force: true }).catch(() => undefined);
   return result;
+}
+
+// 普通分段听写：把音频切成段交给同步 Fun-ASR-Flash（base64 直传，无需公网地址）。
+async function transcribeSegments(
+  inputPath: string,
+  audioDir: string,
+  durationMs: number,
+  signal: AbortSignal | undefined,
+  onProgress: (progress: JobProgress) => void
+): Promise<Awaited<ReturnType<typeof transcribe>>> {
+  const audioSegments = await extractAudioSegments(inputPath, audioDir, durationMs, { signal });
+  throwIfAborted(signal);
+  onProgress({ stage: "transcribing", percent: 65, detail: config.asrProvider === "mock" ? "演示听写正在生成。" : "Fun-ASR 正在生成逐句字幕。" });
+  return audioSegments.length ? await transcribe({ audioSegments, durationMs, signal }) : [];
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
