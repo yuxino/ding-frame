@@ -19,10 +19,12 @@ export async function downloadUrl(
   outputPath: string,
   { referer, signal, onProgress }: { referer?: string; signal?: AbortSignal; onProgress?: ProgressCallback } = {}
 ): Promise<DownloadResult> {
+  // 请求头在探测与下载之间保持一致（部分视频源按 referer/UA 校验）
+  const requestHeaders = { ...headersForVideoUrl(url), ...(referer ? { referer } : {}) };
+
   // 下载前先探测时长：faststart 视频用 Range 请求就能拿到元数据，
   // 超长直接拒绝，避免把整段视频拉下来才发现超时。
-  const probeHeaders = { ...headersForVideoUrl(url), ...(referer ? { referer } : {}) };
-  const probedMs = await probeRemoteVideoDuration(url, probeHeaders, { signal });
+  const probedMs = await probeRemoteVideoDuration(url, requestHeaders, { signal });
   if (probedMs !== null && probedMs > config.maxDurationSeconds * 1000) {
     throw new Error(`视频太长了，第一版最多支持 ${Math.round(config.maxDurationSeconds / 60)} 分钟。`);
   }
@@ -34,7 +36,7 @@ export async function downloadUrl(
       onProgress?.(8, "正在连接视频源。");
       const response = await fetch(url, {
         redirect: "follow",
-        headers: { ...headersForVideoUrl(url), ...(referer ? { referer } : {}), "accept-encoding": "identity" },
+        headers: { ...requestHeaders, "accept-encoding": "identity" },
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
       });
       if (signal?.aborted) throw new DOMException("分析已取消。", "AbortError");

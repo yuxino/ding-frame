@@ -3,14 +3,11 @@
 // Usage:
 //   node dist-server/cli.js <video path or URL> [--json output] [--frames-dir directory]
 // Progress is written to stderr. Analysis output is written to stdout or --json.
-import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
+import { downloadUrl } from "./download.js";
 import { analyzeMedia } from "./pipeline.js";
-import { headersForVideoUrl } from "./url-source.js";
 
 const HELP = `Koma CLI
 
@@ -77,7 +74,8 @@ async function prepareInput(input: string, tempDir: string): Promise<string> {
   if (/^https?:\/\//i.test(input)) {
     const outputPath = join(tempDir, "input.mp4");
     console.error(`[koma] Downloading ${input}`);
-    await downloadInput(input, outputPath);
+    // 复用 HTTP 服务的下载逻辑：自带时长预检、取消支持和重试
+    await downloadUrl(input, outputPath);
     return outputPath;
   }
   const inputPath = resolve(input);
@@ -87,40 +85,6 @@ async function prepareInput(input: string, tempDir: string): Promise<string> {
     throw new Error(`Video file not found: ${input}`);
   }
   return inputPath;
-}
-
-async function downloadInput(url: string, outputPath: string): Promise<void> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await fetch(url, { redirect: "follow", headers: { ...headersForVideoUrl(url), "accept-encoding": "identity" }, signal: AbortSignal.timeout(60_000) });
-      if (!response.ok || !response.body) throw new Error(`Video URL is unavailable: ${response.status}`);
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("The URL returned a web page instead of a directly downloadable video.");
-      const contentLength = Number(response.headers.get("content-length") || 0);
-      if (contentLength > config.maxUploadBytes) throw new Error(`Video is too large. Maximum size is ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB.`);
-      await streamToFile(Readable.fromWeb(response.body as import("node:stream/web").ReadableStream), outputPath, config.maxUploadBytes);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (error instanceof Error && (error.message.startsWith("Video is too large") || error.message.includes("directly downloadable video"))) throw error;
-      if (attempt < 3) console.error(`[koma] Video download was incomplete. Retrying (${attempt}/3).`);
-    }
-  }
-  throw new Error(`Video download was incomplete after 3 attempts.${lastError instanceof Error ? ` ${lastError.message}` : ""}`);
-}
-
-async function streamToFile(readable: NodeJS.ReadableStream, outputPath: string, maxBytes: number): Promise<number> {
-  let bytes = 0;
-  const counter = new Transform({
-    transform(chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: Buffer) => void) {
-      bytes += chunk.length;
-      if (bytes > maxBytes) return callback(new Error(`Video is too large. Maximum size is ${Math.round(maxBytes / 1024 / 1024)} MB.`));
-      callback(null, chunk);
-    }
-  });
-  await pipeline(readable, counter, createWriteStream(outputPath));
-  return bytes;
 }
 
 function parseArgs(args: string[]): CliOptions {

@@ -7,6 +7,8 @@ const entries = new Map<string, { filePath: string; expiresAt: number }>();
 export function registerTempAudio(filePath: string, ttlMs = 15 * 60_000): string {
   const token = randomUUID();
   entries.set(token, { filePath, expiresAt: Date.now() + ttlMs });
+  // 到期自动移除条目，避免异常路径下 Map 无限增长
+  setTimeout(() => entries.delete(token), ttlMs).unref?.();
   return token;
 }
 
