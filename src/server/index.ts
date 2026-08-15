@@ -25,7 +25,8 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
     const part = await request.file();
     if (!part) return reply.code(400).send({ error: "没有找到视频文件。" });
     if (!part.mimetype.startsWith("video/")) return reply.code(415).send({ error: "请放入视频文件。" });
-    job = await createJob({ source: "upload", title: part.filename });
+    const language = requestLanguage((request.query as { lang?: string } | undefined)?.lang);
+    job = await createJob({ source: "upload", title: part.filename, language });
     const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
     job.inputPath = inputPath;
     job.inputMimeType = part.mimetype;
@@ -42,11 +43,11 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
 app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
   try {
-    const body = request.body as { url?: unknown } | undefined;
+    const body = request.body as { url?: unknown; lang?: unknown } | undefined;
     const rawUrl = body?.url;
     const url = normalizeVideoUrl(extractUrlFromText(rawUrl) || (typeof rawUrl === "string" ? rawUrl.trim() : ""));
     validateVideoUrl(url);
-    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址" });
+    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang) });
     job.sourceUrl = url;
     updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
     enqueueAnalysis(job);
@@ -174,4 +175,9 @@ function messageOf(error: unknown): string {
 
 function statusCodeOf(error: unknown): number | undefined {
   return (error as { statusCode?: number })?.statusCode;
+}
+
+// 客户端把界面语言随请求带来，AI 生成文案按该语言输出；缺省中文。
+function requestLanguage(value: unknown): "en" | "zh" {
+  return value === "en" ? "en" : "zh";
 }

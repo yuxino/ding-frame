@@ -37,12 +37,13 @@ interface AnalyzeMediaOptions {
   framesDir: string;
   audioDir: string;
   signal?: AbortSignal;
+  language?: "en" | "zh";
   onProgress?: (progress: JobProgress) => void;
 }
 
 // 与 job 解耦的媒体分析管线，HTTP 任务与 headless CLI 共用。
 // 输入文件与帧目录的生命周期由调用方负责；音频切片作为中间产物在这里即时清理。
-export async function analyzeMedia({ inputPath, title, framesDir, audioDir, signal, onProgress = () => {} }: AnalyzeMediaOptions): Promise<AnalysisResult> {
+export async function analyzeMedia({ inputPath, title, framesDir, audioDir, signal, language = "zh", onProgress = () => {} }: AnalyzeMediaOptions): Promise<AnalysisResult> {
   onProgress({ stage: "inspecting", percent: 12, detail: "正在读取视频尺寸和时长。" });
   const media = await inspectVideo(inputPath, { signal });
   if (!media.hasVideo) throw new Error("这个文件里没有视频画面，请换一个带画面的视频。");
@@ -73,7 +74,7 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, sign
 
   throwIfAborted(signal);
   onProgress({ stage: "interpreting", percent: 82, detail: "把声音与画面放回同一条时间线。" });
-  const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir, signal });
+  const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir, signal, language });
   result.hasSubtitles = Boolean(result.hasSubtitles || media.hasNativeSubtitles);
   await rm(audioDir, { recursive: true, force: true }).catch(() => undefined);
   return result;
@@ -112,6 +113,7 @@ async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
       framesDir,
       audioDir,
       signal,
+      language: job.language,
       onProgress: (progress) => updateJob(job, { progress })
     });
     updateJob(job, { status: "done", result, progress: { stage: "done", percent: 100, detail: "分析已经完成。" } });

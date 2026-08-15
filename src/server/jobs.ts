@@ -55,13 +55,15 @@ export interface Job {
   error: string | null;
   inputPath?: string;
   inputMimeType?: string;
+  /** 分析结果的语言：标题、总结、标签等 AI 生成文案按此语言输出。 */
+  language: "en" | "zh";
 }
 
 const jobs = new Map<string, Job>();
 // 每个任务的取消信号：purgeJob 或到期清理时触发，让正在跑的管线尽快停下来。
 const abortControllers = new Map<string, AbortController>();
 
-export async function createJob({ source, title }: { source: Job["source"]; title: string }): Promise<Job> {
+export async function createJob({ source, title, language = "zh" }: { source: Job["source"]; title: string; language?: "en" | "zh" }): Promise<Job> {
   const id = randomUUID();
   const dir = join(config.tempRoot, `koma-${id}`);
   await mkdir(dir, { recursive: true });
@@ -76,7 +78,8 @@ export async function createJob({ source, title }: { source: Job["source"]; titl
     status: "queued",
     progress: { stage: "queued", percent: 4, detail: "视频已经放入临时空间。" },
     result: null,
-    error: null
+    error: null,
+    language
   };
   jobs.set(id, job);
   abortControllers.set(id, new AbortController());

@@ -26,6 +26,21 @@ describe("local analysis", () => {
     expect(result.summary).toContain("声音与画面");
     expect(result.frames).toEqual([]);
   });
+
+  it("outputs English copy when the analysis language is English", () => {
+    const result = localAnalysis({
+      title: "sample.mp4",
+      durationMs: 18000,
+      frames: [{ filename: "frame-001.jpg", atMs: 0 }],
+      transcript: [{ startMs: 0, endMs: 5000, text: "hello" }],
+      language: "en"
+    });
+    expect(result.summary).toContain("This video's story");
+    expect(result.frames[0].caption).toContain("first shot");
+    expect(result.tags[0].label).toBe("Short video");
+    expect(result.highlights[0].title).toContain("opening");
+    expect(result.title).toBe("sample.mp4");
+  });
 });
 
 describe("vision model result", () => {
@@ -66,5 +81,19 @@ describe("vision model result", () => {
       frames: [],
       transcript: []
     })).toThrow("有效 JSON");
+  });
+
+  it("uses English fallback copy when the analysis language is English", () => {
+    const result = normalizeVisionModelResult({
+      raw: `{"title":"","highlights":[],"tags":[],"frameCaptions":[]}`,
+      fallbackTitle: "input.mp4",
+      durationMs: 8000,
+      frames: [{ filename: "frame-001.jpg", atMs: 0 }],
+      transcript: [{ startMs: 0, endMs: 8000, text: "hello" }],
+      language: "en"
+    });
+    expect(result.summary).toBe("The vision model returned no summary.");
+    expect(result.frames[0].caption).toBe("Visual slice 1");
+    expect(result.highlights[0].title).toBe("Voice cue");
   });
 });

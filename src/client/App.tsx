@@ -265,7 +265,7 @@ function App() {
         setJob(await jobResponse.json() as Job);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
-        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim() }) });
+        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
         if (!response.ok) throw new Error(body.error || t.startFailed);
         const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
@@ -280,7 +280,7 @@ function App() {
   function uploadWithProgress(video: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/analyze/upload");
+      xhr.open("POST", `/api/analyze/upload?lang=${language}`);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) setUploadPercent(Math.round((event.loaded / event.total) * 100));
       };
