@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { config } from "./config.js";
-import type { AnalysisResult, Frame, Highlight, Tag, TranscriptLine } from "./jobs.js";
+import type { AnalysisResult, Chapter, Frame, Tag, TranscriptLine } from "./jobs.js";
 
 export type AnalysisLanguage = "en" | "zh";
 
@@ -24,20 +24,12 @@ export async function analyze({ title, durationMs, frames, transcript, framesDir
 // 文案提示词按界面语言选择；中英文都要求 JSON 字段本身不变，只是文本内容用对应语言。
 function outputLanguageInstruction(language: AnalysisLanguage): string {
   return language === "en"
-    ? "Output every text field in English: the title, summary, tag labels, highlight titles/details, and frame captions must all be in English."
-    : "所有文本字段（标题、总结、标签、重点标题与详情、画面描述）都用简体中文输出。";
+    ? "Output every text field in English: the title, summary, tag labels, chapter titles and summaries, and frame captions must all be in English."
+    : "所有文本字段（标题、总结、标签、章节标题与说明、画面描述）都用简体中文输出。";
 }
 
 export function localAnalysis({ title, durationMs, frames, transcript, language = "zh" }: Omit<AnalyzeInput, "framesDir">): AnalysisResult {
   const en = language === "en";
-  const usableFrames = frames.length ? frames : [{ filename: "", atMs: 0 }];
-  const highlights: Highlight[] = transcript.slice(0, Math.min(3, transcript.length)).map((line, index) => ({
-    atMs: line.startMs || usableFrames[index % usableFrames.length].atMs,
-    title: en
-      ? ["The opening sets the scene", "Key information appears mid-video", "The ending leaves an action"][index] || "A moment worth revisiting"
-      : ["开场建立了场景", "中段出现了主要信息", "结尾留下了一个动作"][index] || "值得回看的片段",
-    detail: line.text
-  }));
   const tags: Tag[] = en
     ? [
         { label: "Short video", category: "Format", atMs: 0 },
@@ -54,7 +46,7 @@ export function localAnalysis({ title, durationMs, frames, transcript, language 
       ? "This video's story comes together at a few points where the audio and visuals meet. They are laid out in order below, so you can jump in from the middle."
       : "这段视频的线索集中在几处声音与画面的交汇处。下面按时间顺序放回它们，适合从中段开始回看。",
     tags,
-    highlights,
+    chapters: fallbackChapters(transcript, durationMs, language),
     transcript,
     hasSubtitles: false,
     frames: frames.map((frame, index) => ({
@@ -64,6 +56,33 @@ export function localAnalysis({ title, durationMs, frames, transcript, language 
         : (en ? `Visual slice ${index + 1}` : `第 ${index + 1} 个视觉切片`)
     }))
   };
+}
+
+// 模型没有返回可用章节时的兜底：按听写句子的时间把视频切成 3 段，
+// 每段用该段时间内的听写文本拼出说明，保证任何情况下都有章节可看。
+export function fallbackChapters(transcript: TranscriptLine[], durationMs: number, language: AnalysisLanguage = "zh"): Chapter[] {
+  const en = language === "en";
+  const duration = Math.max(1, durationMs);
+  const parts = 3;
+  const segmentMs = duration / parts;
+  const chapters: Chapter[] = [];
+  for (let part = 0; part < parts; part += 1) {
+    const startMs = Math.round(part * segmentMs);
+    const endMs = part === parts - 1 ? duration : Math.round((part + 1) * segmentMs);
+    const lines = transcript.filter((line) => line.startMs >= startMs && line.startMs < endMs);
+    const text = lines.map((line) => line.text).join(" ").trim();
+    chapters.push({
+      startMs,
+      endMs,
+      title: en
+        ? ["Opening", "Main content", "Ending"][part] || `Part ${part + 1}`
+        : ["开头", "主体内容", "结尾"][part] || `第 ${part + 1} 段`,
+      summary: text
+        ? (en ? "The narration here covers: " : "这段的讲述内容：") + text.slice(0, 120)
+        : (en ? "This part of the video shows its own visual content." : "这一段展现了相应的画面内容。")
+    });
+  }
+  return chapters;
 }
 
 async function analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language = "zh" }: AnalyzeInput): Promise<AnalysisResult> {
@@ -78,7 +97,7 @@ async function analyzeWithVisionModel({ title, durationMs, frames, transcript, f
   }));
   const frameContent = frameGroups.flat() as Array<{ type: string; text?: string; image_url?: { url: string } }>;
   const transcriptText = transcript.map((line) => `[${line.startMs}] ${line.text}`).join(" ").slice(0, 12000);
-  const prompt = `你在分析一段小视频。结合画面和听写理解真实内容，只返回一个 JSON 对象，不要 markdown：{"title":"不超过18字的内容标题","summary":"不超过80字的完整视频总结","tags":[{"label":"不超过8字","category":"主体|场景|动作|主题|氛围|形式","atMs":0}],"highlights":[{"atMs":0,"title":"不超过12字","detail":"不超过60字"}],"frameCaptions":[{"index":0,"caption":"不超过24字的画面描述"}],"hasSubtitles":true}。${outputLanguageInstruction(language)}tags 给出 4 到 8 个最值得检索或回看的标签，atMs 必须参考相邻关键帧或听写的时间，是该内容首次明确出现的毫秒时间；只标声音或画面能够确认的内容，不推断人物身份、族群、疾病等敏感属性。每张图片前都标注了它在完整抽帧列表中的原始 index 和 atMs，frameCaptions.index 必须原样使用该原始 index。hasSubtitles 表示这些画面底部是否出现烧录字幕文字（画面里自带的中文字幕），出现了填 true，没有填 false，只能从画面证据判断。视频原始名称：${title}；时长毫秒：${durationMs}；听写：${transcriptText || "无可用听写"}`;
+  const prompt = `你在分析一段小视频。结合画面和听写理解真实内容，只返回一个 JSON 对象，不要 markdown：{"title":"不超过18字的内容标题","summary":"不超过80字的完整视频总结","tags":[{"label":"不超过8字","category":"主体|场景|动作|主题|氛围|形式","atMs":0}],"chapters":[{"startMs":0,"endMs":10000,"title":"不超过12字的章节标题","summary":"两三句话讲清这段内容"}],"frameCaptions":[{"index":0,"caption":"不超过24字的画面描述"}],"hasSubtitles":true}。${outputLanguageInstruction(language)}chapters 是把整个视频按内容切成的 3 到 6 个章节，必须按时间顺序连续覆盖从头到尾（第一章从 0 开始，最后一章到视频末尾），startMs/endMs 参考关键帧或听写的时间，chapter 的 summary 写两三句、说清楚这一段到底讲了什么、有什么关键信息；不要写成“关注点/亮点”，要像给没看过的人做内容摘要。tags 给出 4 到 8 个最值得检索或回看的标签，atMs 必须参考相邻关键帧或听写的时间，是该内容首次明确出现的毫秒时间；只标声音或画面能够确认的内容，不推断人物身份、族群、疾病等敏感属性。每张图片前都标注了它在完整抽帧列表中的原始 index 和 atMs，frameCaptions.index 必须原样使用该原始 index。hasSubtitles 表示这些画面底部是否出现烧录字幕文字（画面里自带的中文字幕），出现了填 true，没有填 false，只能从画面证据判断。视频原始名称：${title}；时长毫秒：${durationMs}；听写：${transcriptText || "无可用听写"}`;
   const response = await fetch(`${config.visionBaseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${config.visionApiKey}`, "content-type": "application/json" },
@@ -123,7 +142,7 @@ export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, fra
     title?: unknown;
     summary?: unknown;
     tags?: unknown;
-    highlights?: unknown;
+    chapters?: unknown;
     frameCaptions?: unknown;
     hasSubtitles?: unknown;
   };
@@ -146,18 +165,7 @@ export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, fra
     caption: captions.get(index) || (en ? `Visual slice ${index + 1}` : `视觉切片 ${index + 1}`)
   }));
   const maxTime = Math.max(0, Number(durationMs) || 0);
-  const highlights: Highlight[] = (Array.isArray(parsed.highlights) ? parsed.highlights : [])
-    .map((item) => ({
-      atMs: Math.min(maxTime, Math.max(0, Number((item as { atMs?: unknown })?.atMs) || 0)),
-      title: cleanText((item as { title?: unknown })?.title, en ? "A moment worth revisiting" : "值得回看的片段", 24),
-      detail: cleanText((item as { detail?: unknown })?.detail, en ? "The visuals and audio come together here." : "画面与声音在这里形成了一个线索。", 120)
-    }))
-    .slice(0, 6);
-  const fallbackHighlights: Highlight[] = transcript.slice(0, 3).map((line) => ({
-    atMs: Math.min(maxTime, Math.max(0, Number(line.startMs) || 0)),
-    title: en ? "Voice cue" : "人声线索",
-    detail: cleanText(line.text, en ? "Transcript excerpt" : "听写片段", 120)
-  }));
+  const chapters = normalizeChapters(parsed.chapters, maxTime, transcript, language);
   const allowedCategories = new Set(["主体", "场景", "动作", "主题", "氛围", "形式"]);
   const seenTags = new Set<string>();
   const tags: Tag[] = (Array.isArray(parsed.tags) ? parsed.tags : [])
@@ -173,10 +181,10 @@ export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, fra
       return true;
     })
     .slice(0, 8);
-  const fallbackTags: Tag[] = (highlights.length ? highlights : fallbackHighlights).slice(0, 4).map((item) => ({
-    label: cleanText(item.title, en ? "Video segment" : "视频片段", 16),
+  const fallbackTags: Tag[] = chapters.slice(0, 4).map((chapter) => ({
+    label: cleanText(chapter.title, en ? "Video segment" : "视频片段", 16),
     category: "主题",
-    atMs: item.atMs
+    atMs: chapter.startMs
   }));
 
   return {
@@ -184,11 +192,36 @@ export function normalizeVisionModelResult({ raw, fallbackTitle, durationMs, fra
     durationMs: maxTime,
     summary: cleanText(parsed.summary, en ? "The vision model returned no summary." : "画面模型没有返回摘要。", 180),
     tags: tags.length ? tags : fallbackTags,
-    highlights: highlights.length ? highlights : fallbackHighlights,
+    chapters,
     transcript,
     hasSubtitles: parsed.hasSubtitles === true,
     frames: normalizedFrames
   };
+}
+
+// 规范化模型返回的章节：修边界、排序、去重，保证覆盖整段视频；
+// 模型没返回可用章节时退回按听写切分的兜底章节。
+export function normalizeChapters(raw: unknown, durationMs: number, transcript: TranscriptLine[], language: AnalysisLanguage = "zh"): Chapter[] {
+  const en = language === "en";
+  const maxTime = Math.max(0, durationMs);
+  if (!Array.isArray(raw)) return fallbackChapters(transcript, maxTime, language);
+
+  const seen = new Set<string>();
+  const chapters: Chapter[] = [];
+  for (const item of raw) {
+    const startMs = Math.min(maxTime, Math.max(0, Number((item as { startMs?: unknown })?.startMs) || 0));
+    const endMs = Math.min(maxTime, Math.max(startMs, Number((item as { endMs?: unknown })?.endMs) || startMs));
+    const title = cleanText((item as { title?: unknown })?.title, "", 24);
+    const summary = cleanText((item as { summary?: unknown })?.summary, "", 240);
+    if (!title && !summary) continue;
+    // 按时间范围去重，防止模型对同一时间段输出多个章节
+    const key = `${startMs}-${endMs}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    chapters.push({ startMs, endMs, title: title || (en ? "Untitled section" : "未命名段落"), summary });
+  }
+  chapters.sort((a, b) => a.startMs - b.startMs);
+  return chapters.slice(0, 8).length ? chapters.slice(0, 8) : fallbackChapters(transcript, maxTime, language);
 }
 
 function cleanText(value: unknown, fallback: string, maxLength: number): string {

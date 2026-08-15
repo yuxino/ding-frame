@@ -83,8 +83,9 @@ const copy = {
     frameTimeline: "Key frame timeline",
     jumpTo: "Jump to",
     keyFrame: "key frame",
-    highlights: "Moments worth revisiting",
-    highlightsCount: "highlights",
+    chapters: "Chapter summary",
+    chaptersSub: "Click a chapter to jump to that part of the video",
+    chaptersCount: "chapters",
     subtitlePanel: "Subtitles",
     subtitlePanelText: "One line at a time. Click any subtitle to jump back to it.",
     playFrom: "Play from",
@@ -173,8 +174,9 @@ const copy = {
     frameTimeline: "关键帧时间线",
     jumpTo: "跳到",
     keyFrame: "关键帧",
-    highlights: "值得回看的瞬间",
-    highlightsCount: "个重点",
+    chapters: "内容章节",
+    chaptersSub: "点击章节跳到对应内容",
+    chaptersCount: "个章节",
     subtitlePanel: "字幕",
     subtitlePanelText: "每句一行，点击直接跳回对应位置。",
     playFrom: "从",
@@ -192,9 +194,9 @@ const copy = {
 interface JobProgress { stage: Stage; percent: number; detail: string; }
 interface TranscriptLine { startMs: number; endMs: number; text: string; speaker?: string; }
 interface Frame { filename: string; atMs: number; caption?: string; url: string; }
-interface Highlight { atMs: number; title: string; detail: string; }
+interface Chapter { startMs: number; endMs: number; title: string; summary: string; }
 interface Tag { label: string; category: string; atMs: number; }
-interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; highlights: Highlight[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; }
+interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; }
 interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; expiresAt: number; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; result: AnalysisResult | null; error: string | null; }
 
 function formatDate(timestamp: number, language: Language): string {
@@ -380,7 +382,7 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
     <div className="frame-strip" aria-label={t.frameTimeline}>{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => syncToTime(frame.atMs)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
-    <section className="highlights"><div className="section-heading"><span>{t.highlights}</span><small>{result.highlights.length} {t.highlightsCount}</small></div>{result.highlights.map((highlight) => <button type="button" className="highlight" key={`${highlight.atMs}-${highlight.title}`} onClick={() => syncToTime(highlight.atMs)}><span className="highlight-time"><Glyph name="play" size={13} />{formatTime(highlight.atMs)}</span><span><strong>{highlight.title}</strong><p>{highlight.detail}</p></span><Glyph name="arrow" size={18} /></button>)}</section>
+    <section className="chapters"><div className="section-heading"><span>{t.chapters}</span><small>{result.chapters.length} {t.chaptersCount} · {t.chaptersSub}</small></div><div className="chapter-list">{(result.chapters || []).map((chapter, index) => <button type="button" className="chapter" key={`${chapter.startMs}-${index}`} onClick={() => syncToTime(chapter.startMs)}><span className="chapter-rail"><strong>{index + 1}</strong><i>{formatTime(chapter.startMs)} – {formatTime(chapter.endMs)}</i></span><span className="chapter-body"><strong>{chapter.title}</strong><p>{chapter.summary}</p></span><Glyph name="arrow" size={18} /></button>)}</div></section>
   </div>
   <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="clock" size={14} />{Math.ceil(remaining / 60000)} {t.remaining}</div></aside>
   </section>;

@@ -12,10 +12,12 @@ export interface Frame {
   path?: string;
 }
 
-export interface Highlight {
-  atMs: number;
+export interface Chapter {
+  startMs: number;
+  endMs: number;
   title: string;
-  detail: string;
+  /** 两三句的详细说明，讲清这段内容讲了什么 */
+  summary: string;
 }
 
 export interface Tag {
@@ -29,7 +31,8 @@ export interface AnalysisResult {
   durationMs: number;
   summary: string;
   tags: Tag[];
-  highlights: Highlight[];
+  /** 内容章节总结：覆盖整个视频，按时间分段，点击可跳转 */
+  chapters: Chapter[];
   transcript: TranscriptLine[];
   hasSubtitles?: boolean;
   frames: Frame[];
