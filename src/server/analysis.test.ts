@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fallbackChapters, localAnalysis, normalizeChapters, normalizeVisionModelResult, selectRepresentativeFrames } from "./analysis.js";
+import { fallbackChapters, localAnalysis, normalizeChapters, normalizeVisionModelResult, selectRepresentativeFrames, truncateTranscript } from "./analysis.js";
 
 describe("local analysis", () => {
   it("keeps transcript and frames aligned in a readable result", async () => {
@@ -151,5 +151,33 @@ describe("normalize chapters", () => {
   it("falls back to transcript chapters when the model returns none", () => {
     const chapters = normalizeChapters([], 10000, [{ startMs: 0, endMs: 5000, text: "内容" }]);
     expect(chapters.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("truncateTranscript", () => {
+  it("keeps short transcripts unchanged", () => {
+    expect(truncateTranscript("hello", 30000)).toBe("hello");
+    expect(truncateTranscript("", 30000)).toBe("");
+  });
+
+  it("keeps the head and tail when the transcript is too long", () => {
+    const text = "A".repeat(1000) + "|MIDDLE|" + "B".repeat(1000);
+    const truncated = truncateTranscript(text, 100);
+    expect(truncated.length).toBeLessThanOrEqual(100 + 20); // 截断 + 省略标记
+    expect(truncated).toContain("AAAA");
+    expect(truncated).toContain("BBBB");
+    expect(truncated).not.toContain("MIDDLE");
+    expect(truncated).toContain("省略");
+  });
+
+  it("head takes 60% and tail 40% of the budget", () => {
+    const text = "A".repeat(500) + "B".repeat(500);
+    const truncated = truncateTranscript(text, 100);
+    const headCount = (truncated.match(/A/g) || []).length;
+    const tailCount = (truncated.match(/B/g) || []).length;
+    expect(headCount).toBeGreaterThanOrEqual(59);
+    expect(headCount).toBeLessThanOrEqual(61);
+    expect(tailCount).toBeGreaterThanOrEqual(39);
+    expect(tailCount).toBeLessThanOrEqual(41);
   });
 });

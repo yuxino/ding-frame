@@ -96,7 +96,10 @@ async function analyzeWithVisionModel({ title, durationMs, frames, transcript, f
     ] as const;
   }));
   const frameContent = frameGroups.flat() as Array<{ type: string; text?: string; image_url?: { url: string } }>;
-  const transcriptText = transcript.map((line) => `[${line.startMs}] ${line.text}`).join(" ").slice(0, 12000);
+  const transcriptText = truncateTranscript(
+    transcript.map((line) => `[${line.startMs}] ${line.text}`).join(" "),
+    config.visionTranscriptChars
+  );
   const prompt = `你在分析一段小视频。结合画面和听写理解真实内容，只返回一个 JSON 对象，不要 markdown：{"title":"不超过18字的内容标题","summary":"不超过80字的完整视频总结","tags":[{"label":"不超过8字","category":"主体|场景|动作|主题|氛围|形式","atMs":0}],"chapters":[{"startMs":0,"endMs":10000,"title":"不超过12字的章节标题","summary":"两三句话讲清这段内容"}],"frameCaptions":[{"index":0,"caption":"不超过24字的画面描述"}],"hasSubtitles":true}。${outputLanguageInstruction(language)}chapters 是把整个视频按内容切成的 3 到 6 个章节，必须按时间顺序连续覆盖从头到尾（第一章从 0 开始，最后一章到视频末尾），startMs/endMs 参考关键帧或听写的时间，chapter 的 summary 写两三句、说清楚这一段到底讲了什么、有什么关键信息；不要写成“关注点/亮点”，要像给没看过的人做内容摘要。tags 给出 4 到 8 个最值得检索或回看的标签，atMs 必须参考相邻关键帧或听写的时间，是该内容首次明确出现的毫秒时间；只标声音或画面能够确认的内容，不推断人物身份、族群、疾病等敏感属性。每张图片前都标注了它在完整抽帧列表中的原始 index 和 atMs，frameCaptions.index 必须原样使用该原始 index。hasSubtitles 表示这些画面底部是否出现烧录字幕文字（画面里自带的中文字幕），出现了填 true，没有填 false，只能从画面证据判断。视频原始名称：${title}；时长毫秒：${durationMs}；听写：${transcriptText || "无可用听写"}`;
   const response = await fetch(`${config.visionBaseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
@@ -227,4 +230,15 @@ export function normalizeChapters(raw: unknown, durationMs: number, transcript: 
 function cleanText(value: unknown, fallback: string, maxLength: number): string {
   const text = typeof value === "string" ? value.trim() : "";
   return (text || fallback).slice(0, maxLength);
+}
+
+// 听写文本过长时保留头尾、中间省略：视频的开场和结尾通常信息密度最高，
+// 单纯从头部截断会把后半段口述内容全部丢掉。
+export function truncateTranscript(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const headChars = Math.floor(maxChars * 0.6);
+  const tailChars = maxChars - headChars;
+  const head = text.slice(0, headChars);
+  const tail = text.slice(-tailChars);
+  return `${head}\n……（中间部分过长已省略）……\n${tail}`;
 }
