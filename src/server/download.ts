@@ -17,7 +17,7 @@ type ProgressCallback = (percent: number, detail: string) => void;
 export async function downloadUrl(
   url: string,
   outputPath: string,
-  { referer, onProgress }: { referer?: string; onProgress?: ProgressCallback } = {}
+  { referer, signal, onProgress }: { referer?: string; signal?: AbortSignal; onProgress?: ProgressCallback } = {}
 ): Promise<DownloadResult> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -27,8 +27,9 @@ export async function downloadUrl(
       const response = await fetch(url, {
         redirect: "follow",
         headers: { ...headersForVideoUrl(url), ...(referer ? { referer } : {}), "accept-encoding": "identity" },
-        signal: AbortSignal.timeout(120_000)
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
       });
+      if (signal?.aborted) throw new DOMException("分析已取消。", "AbortError");
       if (!response.ok || !response.body) throw new Error(`视频地址无法访问：${response.status}`);
       const contentType = response.headers.get("content-type") || "";
       if (contentType.includes("text/html") || contentType.includes("text/plain")) throw new Error("这个地址返回的是网页，没有解析出可下载的视频文件。抖音/B站分享链接可能被风控或是图文笔记，也可以换成视频直链试试。");
@@ -38,11 +39,12 @@ export async function downloadUrl(
       const bytes = await streamToFile(stream, outputPath, config.maxUploadBytes, contentLength, onProgress);
       if (!bytes) throw new Error("视频下载结果为空。");
       if (contentLength && bytes !== contentLength) throw new Error(`视频下载不完整（收到 ${bytes} / ${contentLength} 字节）。`);
-      await inspectVideo(outputPath);
+      await inspectVideo(outputPath, { signal });
       onProgress?.(12, "视频已进入临时空间。");
       return { contentType };
     } catch (error) {
       lastError = error;
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
       if (error instanceof Error && (error.message.startsWith("视频太长") || error.message.includes("不是可直接下载的视频"))) throw error;
       if (attempt < 3) onProgress?.(8, `视频没有完整到达，正在重新取回（${attempt}/3）。`);
     }

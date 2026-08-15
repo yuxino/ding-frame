@@ -8,12 +8,13 @@ interface AnalyzeInput {
   frames: Frame[];
   transcript: TranscriptLine[];
   framesDir: string;
+  signal?: AbortSignal;
 }
 
-export async function analyze({ title, durationMs, frames, transcript, framesDir }: AnalyzeInput): Promise<AnalysisResult> {
+export async function analyze({ title, durationMs, frames, transcript, framesDir, signal }: AnalyzeInput): Promise<AnalysisResult> {
   if (config.analysisProvider === "mock") return localAnalysis({ title, durationMs, frames, transcript });
   if (config.analysisProvider !== "openai-compatible") throw new Error(`未知的 ANALYSIS_PROVIDER：${config.analysisProvider}`);
-  return analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir });
+  return analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal });
 }
 
 export function localAnalysis({ title, durationMs, frames, transcript }: Omit<AnalyzeInput, "framesDir">): AnalysisResult {
@@ -39,9 +40,9 @@ export function localAnalysis({ title, durationMs, frames, transcript }: Omit<An
   };
 }
 
-async function analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir }: AnalyzeInput): Promise<AnalysisResult> {
+async function analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal }: AnalyzeInput): Promise<AnalysisResult> {
   if (!config.visionApiKey) throw new Error("配置 VISION_API_KEY 后才能使用画面理解模型。");
-  const selectedFrames = selectRepresentativeFrames(frames, 6);
+  const selectedFrames = selectRepresentativeFrames(frames, config.visionMaxFrames);
   const frameGroups = await Promise.all(selectedFrames.map(async ({ frame, index }) => {
     const base64 = (await readFile(`${framesDir}/${frame.filename}`)).toString("base64");
     return [
@@ -56,7 +57,7 @@ async function analyzeWithVisionModel({ title, durationMs, frames, transcript, f
     method: "POST",
     headers: { Authorization: `Bearer ${config.visionApiKey}`, "content-type": "application/json" },
     body: JSON.stringify({ model: config.visionModel, temperature: 0.2, max_tokens: 1000, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
-    signal: AbortSignal.timeout(config.dashscopeTimeoutMs)
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(config.dashscopeTimeoutMs)]) : AbortSignal.timeout(config.dashscopeTimeoutMs)
   });
   const body = await response.json().catch(() => ({})) as { error?: { message?: string }; message?: string; choices?: Array<{ message?: { content?: unknown } }> };
   if (!response.ok) throw new Error(body.error?.message || body.message || `画面模型请求失败：${response.status}`);

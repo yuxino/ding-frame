@@ -1,7 +1,5 @@
-import { createWriteStream } from "node:fs";
 import { mkdir, readdir, rm } from "node:fs/promises";
-import { basename, join } from "node:path";
-import { pipeline } from "node:stream/promises";
+import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import ffmpegStatic from "ffmpeg-static";
@@ -15,8 +13,6 @@ const ffprobeBin: string = process.env.FFPROBE_PATH || ((ffprobeStatic as { path
 
 export interface MediaInfo {
   durationMs: number;
-  width: number | null;
-  height: number | null;
   hasVideo: boolean;
   hasAudio: boolean;
   hasNativeSubtitles: boolean;
@@ -34,11 +30,11 @@ export interface AudioSegment {
   path: string;
 }
 
-export async function inspectVideo(inputPath: string): Promise<MediaInfo> {
-  const output = await runCommand(ffprobeBin, ["-v", "error", "-show_format", "-show_streams", "-of", "json", inputPath]);
+export async function inspectVideo(inputPath: string, options: { signal?: AbortSignal } = {}): Promise<MediaInfo> {
+  const output = await runCommand(ffprobeBin, ["-v", "error", "-show_format", "-show_streams", "-of", "json", inputPath], options.signal);
   const parsed = JSON.parse(output.stdout) as {
     format?: { duration?: string };
-    streams?: Array<{ codec_type?: string; width?: number; height?: number }>;
+    streams?: Array<{ codec_type?: string }>;
   };
   const durationSeconds = Number.parseFloat(parsed.format?.duration || "0");
   if (durationSeconds > config.maxDurationSeconds) {
@@ -46,32 +42,114 @@ export async function inspectVideo(inputPath: string): Promise<MediaInfo> {
   }
   return {
     durationMs: Math.round(durationSeconds * 1000),
-    width: parsed.streams?.find((stream) => stream.codec_type === "video")?.width ?? null,
-    height: parsed.streams?.find((stream) => stream.codec_type === "video")?.height ?? null,
     hasVideo: parsed.streams?.some((stream) => stream.codec_type === "video") || false,
     hasAudio: parsed.streams?.some((stream) => stream.codec_type === "audio") || false,
     hasNativeSubtitles: parsed.streams?.some((stream) => stream.codec_type === "subtitle") || false
   };
 }
 
-export async function extractFullAudio(inputPath: string, outputPath: string): Promise<string> {
+export async function extractFullAudio(inputPath: string, outputPath: string, options: { signal?: AbortSignal } = {}): Promise<string> {
   await runCommand(ffmpegBin, [
     "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
     "-vn", "-ac", "1", "-ar", "16000",
     "-c:a", "libmp3lame", "-b:a", "128k",
     outputPath
-  ]);
+  ], options.signal);
   return outputPath;
 }
 
-export async function extractFrames(inputPath: string, outputDir: string): Promise<FrameInfo[]> {
+export async function extractFrames(inputPath: string, outputDir: string, options: { signal?: AbortSignal; durationMs?: number } = {}): Promise<FrameInfo[]> {
   await mkdir(outputDir, { recursive: true });
-  await runCommand(ffmpegBin, ["-hide_banner", "-loglevel", "error", "-y", "-i", inputPath, "-vf", `fps=1/${config.frameIntervalSeconds},scale=960:-2`, "-frames:v", String(config.maxFrames), join(outputDir, "frame-%03d.jpg")]);
-  const names = (await readdir(outputDir)).filter((name) => name.endsWith(".jpg")).sort();
-  return names.map((filename, index) => ({ filename: basename(filename), atMs: index * config.frameIntervalSeconds * 1000 }));
+
+  // 先探明时长，决定均匀兜底帧的间隔，保证抽帧覆盖整个视频而不是只抽开头一段。
+  const info = options.durationMs ? { durationMs: options.durationMs } : await inspectVideo(inputPath, options);
+  const durationMs = Math.max(1, info.durationMs);
+
+  // 第一步：场景检测抽“转场/重点”帧。画面变化超过阈值时保留，并让 ffmpeg
+  // 通过 showinfo 把每帧的真实时间戳打到 stderr，我们再解析出来。
+  const sceneFrames = await extractSceneFrames(inputPath, outputDir, options);
+
+  // 第二步：如果重点帧不足，按时间均匀补足到 maxFrames，保证从头到尾都有画面。
+  const frames = sceneFrames.length >= config.maxFrames
+    ? sceneFrames.slice(0, config.maxFrames)
+    : [...sceneFrames, ...await fillUniformFrames(inputPath, outputDir, durationMs, sceneFrames, options)];
+
+  // 场景帧 + 均匀帧可能交错，统一按时间排序；文件名保留各自前缀，保证唯一即可。
+  const ordered = [...frames].sort((a, b) => a.atMs - b.atMs);
+  // 清理未选中的临时帧文件（scene/uniform 前缀但没进结果列表的），保持目录干净。
+  const kept = new Set(ordered.map((frame) => frame.filename));
+  for (const name of (await readdir(outputDir)).filter((n) => n.endsWith(".jpg") && !kept.has(n))) {
+    await rm(join(outputDir, name), { force: true }).catch(() => undefined);
+  }
+  return ordered;
 }
 
-export async function extractAudioSegments(inputPath: string, outputDir: string, durationMs: number): Promise<AudioSegment[]> {
+// 场景检测：select='gt(scene,THRESHOLD)' 只保留画面突变帧，showinfo 输出真实时间戳。
+// showinfo 走 info 级日志，所以这里不能用 -loglevel error（会把时间戳过滤掉）。
+async function extractSceneFrames(inputPath: string, outputDir: string, options: { signal?: AbortSignal }): Promise<FrameInfo[]> {
+  try {
+    await rm(join(outputDir, "scene-*.jpg"), { force: true }).catch(() => undefined);
+    const output = await runCommand(ffmpegBin, [
+      "-hide_banner", "-loglevel", "info", "-y", "-i", inputPath,
+      "-vf", `select='gt(scene,${config.frameSceneThreshold})',scale=${config.frameWidth}:-2,showinfo`,
+      "-vsync", "vfr", "-frames:v", String(config.maxFrames),
+      join(outputDir, "scene-%03d.jpg")
+    ], options.signal);
+    // showinfo 输出形如 [Parsed_showinfo_3 @ ...] n: 12 pts: 24000 pts_time:0.96 ...
+    const times = parseShowinfoTimes(output.stderr);
+    const names = (await readdir(outputDir)).filter((name) => name.startsWith("scene-") && name.endsWith(".jpg")).sort();
+    return names.map((filename, index) => ({
+      filename,
+      atMs: Math.max(0, Math.round((times[index] ?? 0) * 1000))
+    }));
+  } catch {
+    // 场景检测失败（如阈值过高没抽到帧）时返回空，由均匀补足接管
+    return [];
+  }
+}
+
+// 均匀补足：在“场景帧之外”的时间点均匀抽帧，保证覆盖全程。
+// fps=1/interval 会输出与期望间隔对应的帧，-frames:v 截断数量，不必再挑帧。
+async function fillUniformFrames(inputPath: string, outputDir: string, durationMs: number, existing: FrameInfo[], options: { signal?: AbortSignal }): Promise<FrameInfo[]> {
+  const remaining = Math.max(1, config.maxFrames - existing.length);
+  // 期望间隔：希望 remaining 帧均匀铺满整段视频；短视频允许更密的采样
+  const intervalSeconds = Math.max(0.1, (durationMs / 1000) / remaining);
+  await rm(join(outputDir, "uniform-*.jpg"), { force: true }).catch(() => undefined);
+  const output = await runCommand(ffmpegBin, [
+    "-hide_banner", "-loglevel", "info", "-y", "-i", inputPath,
+    "-vf", `fps=1/${intervalSeconds},scale=${config.frameWidth}:-2,showinfo`,
+    "-frames:v", String(config.maxFrames),
+    join(outputDir, "uniform-%03d.jpg")
+  ], options.signal);
+  const times = parseShowinfoTimes(output.stderr);
+  const names = (await readdir(outputDir)).filter((name) => name.startsWith("uniform-") && name.endsWith(".jpg")).sort();
+  // 与已有帧（场景帧）过于接近的时间点跳过，避免同一画面出现两次
+  const existingBuckets = new Set(existing.map((frame) => Math.round(frame.atMs / 500) * 500));
+  const added: FrameInfo[] = [];
+  for (let index = 0; index < names.length && added.length < remaining; index += 1) {
+    const atMs = Math.max(0, Math.round((times[index] ?? index * intervalSeconds) * 1000));
+    if (existingBuckets.has(Math.round(atMs / 500) * 500)) continue;
+    added.push({ filename: names[index], atMs });
+  }
+  return added;
+}
+
+// 从 ffmpeg showinfo 的 stderr 输出里解析每帧的 pts_time（单位秒）。
+// 只认 showinfo 行，避免 info 级日志里其他 pts 字样被误收。
+export function parseShowinfoTimes(stderr: string): number[] {
+  const times: number[] = [];
+  for (const line of stderr.split("\n")) {
+    if (!line.includes("showinfo")) continue;
+    const match = line.match(/pts_time:(\d+(?:\.\d+)?)/);
+    if (match) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value)) times.push(value);
+    }
+  }
+  return times;
+}
+
+export async function extractAudioSegments(inputPath: string, outputDir: string, durationMs: number, options: { signal?: AbortSignal } = {}): Promise<AudioSegment[]> {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
   await runCommand(ffmpegBin, [
@@ -80,7 +158,7 @@ export async function extractAudioSegments(inputPath: string, outputDir: string,
     "-c:a", "libmp3lame", "-b:a", "64k",
     "-f", "segment", "-segment_time", String(config.asrSegmentSeconds),
     "-reset_timestamps", "1", join(outputDir, "segment-%03d.mp3")
-  ]);
+  ], options.signal);
   const names = (await readdir(outputDir)).filter((name) => name.endsWith(".mp3")).sort();
   return createAudioSegmentMetadata(names, durationMs, config.asrSegmentSeconds)
     .map((segment) => ({ ...segment, path: join(outputDir, segment.filename) }));
@@ -98,15 +176,24 @@ export function createAudioSegmentMetadata(names: string[], durationMs: number, 
   });
 }
 
-export function runCommand(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+export function runCommand(command: string, args: string[], signal?: AbortSignal): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    const onAbort = () => {
+      child.kill("SIGKILL");
+      reject(new DOMException("分析已取消。", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", (error) => reject(new Error(`${command} 不可用：${error.message}`)));
+    child.on("error", (error) => {
+      signal?.removeEventListener("abort", onAbort);
+      reject(new Error(`${command} 不可用：${error.message}`));
+    });
     child.on("close", (code) => {
+      signal?.removeEventListener("abort", onAbort);
       if (code === 0) return resolve({ stdout, stderr });
       reject(new Error(stderr.trim() || `${command} 退出码 ${code}`));
     });

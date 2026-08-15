@@ -14,6 +14,11 @@ Copy `.env.example` to `.env`. Most options are optional. Without model credenti
 | `ASR_DIARIZATION` | `auto` | Speaker diarization mode: `on`, `off`, or `auto` |
 | `MAX_UPLOAD_BYTES` | `524288000` | Maximum upload size (500 MB) |
 | `MAX_DURATION_SECONDS` | `900` | Maximum video duration (15 minutes) |
+| `FRAME_WIDTH` | `1280` | Key frame width; larger is sharper but costs storage and API traffic |
+| `FRAME_SCENE_THRESHOLD` | `0.4` | Scene-change threshold (0–1); frames above it are kept as key moments |
+| `MAX_FRAMES` | `18` | Maximum key frames (scene frames + uniform fill) |
+| `VISION_MAX_FRAMES` | `10` | Representative frames sent to the vision model per analysis |
+| `MAX_CONCURRENT_JOBS` | `2` | Maximum analyses running at the same time; extra jobs queue up |
 | `RESULT_TTL_SECONDS` | `1200` | Result retention time (20 minutes) |
 
 ## Processing Pipeline

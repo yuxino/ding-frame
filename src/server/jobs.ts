@@ -58,6 +58,8 @@ export interface Job {
 }
 
 const jobs = new Map<string, Job>();
+// 每个任务的取消信号：purgeJob 或到期清理时触发，让正在跑的管线尽快停下来。
+const abortControllers = new Map<string, AbortController>();
 
 export async function createJob({ source, title }: { source: Job["source"]; title: string }): Promise<Job> {
   const id = randomUUID();
@@ -77,8 +79,13 @@ export async function createJob({ source, title }: { source: Job["source"]; titl
     error: null
   };
   jobs.set(id, job);
+  abortControllers.set(id, new AbortController());
   scheduleExpiry(job);
   return job;
+}
+
+export function getJobAbortSignal(id: string): AbortSignal | undefined {
+  return abortControllers.get(id)?.signal;
 }
 
 export function getJob(id: string): Job | undefined {
@@ -114,13 +121,23 @@ export function serializeJob(job: Job | undefined) {
 }
 
 export async function purgeJob(id: string): Promise<void> {
+  await expireJob(id);
+}
+
+// 清除任务：触发取消信号、移除内存记录、删除磁盘目录。
+// 同时被 purgeJob 和到期定时器使用，保证两种路径都清理干净。
+export async function expireJob(id: string): Promise<void> {
   const job = jobs.get(id);
+  abortControllers.get(id)?.abort();
+  abortControllers.delete(id);
   jobs.delete(id);
   if (job) await rm(job.dir, { recursive: true, force: true }).catch(() => undefined);
 }
 
 function scheduleExpiry(job: Job): void {
   setTimeout(() => {
-    if (jobs.get(job.id) === job) jobs.delete(job.id);
+    // 到期时不仅要清掉内存记录，还要把磁盘上的视频、抽帧和中间产物一起删掉，
+    // 兑现“20 分钟后自动消失”的承诺，避免临时目录无限堆积。
+    expireJob(job.id).catch(() => undefined);
   }, Math.max(0, job.expiresAt - Date.now())).unref?.();
 }

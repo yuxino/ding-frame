@@ -14,6 +14,11 @@
 | `ASR_DIARIZATION` | `auto` | 说话人分离模式：`on`、`off` 或 `auto` |
 | `MAX_UPLOAD_BYTES` | `524288000` | 最大上传大小（500 MB） |
 | `MAX_DURATION_SECONDS` | `900` | 视频最长时长（15 分钟） |
+| `FRAME_WIDTH` | `1280` | 关键帧宽度；越大越清晰，但更耗存储和 API 流量 |
+| `FRAME_SCENE_THRESHOLD` | `0.4` | 场景变化阈值（0–1）；画面变化超过它的帧作为重点帧保留 |
+| `MAX_FRAMES` | `18` | 关键帧数量上限（场景帧 + 均匀补足帧） |
+| `VISION_MAX_FRAMES` | `10` | 每次分析交给视觉模型理解的代表帧数上限 |
+| `MAX_CONCURRENT_JOBS` | `2` | 同时运行的分析任务数上限，超出的任务排队等待 |
 | `RESULT_TTL_SECONDS` | `1200` | 分析结果保留时间（20 分钟） |
 
 ## 处理流程

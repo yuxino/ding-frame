@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   bilibiliBvid,
   deWatermark,
   douyinShareUrl,
   extractUrlFromText,
+  fetchTtwidCookie,
   looksLikeBilibiliLink,
   looksLikeDouyinLink,
   parseDouyinPage,
@@ -193,7 +194,7 @@ describe("resolveDouyinVideo", () => {
         text: async () => `<script>window._ROUTER_DATA = ${routerJson}</script>`
       };
     };
-    const resolved = await resolveDouyinVideo("https://v.douyin.com/abc/", { fetchImpl });
+    const resolved = await resolveDouyinVideo("https://v.douyin.com/abc/", { fetchImpl, cookie: "ttwid=test" });
     expect(resolved.url).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=v1");
     expect(resolved.title).toBe("标题");
     expect(resolved.source).toBe("douyin");
@@ -227,7 +228,7 @@ describe("resolveDouyinVideo", () => {
       };
     };
     const link = "https://www.douyin.com/jingxuan/search/x?modal_id=7625447143519604002";
-    const resolved = await resolveDouyinVideo(link, { fetchImpl });
+    const resolved = await resolveDouyinVideo(link, { fetchImpl, cookie: "ttwid=test" });
     expect(fetched[0]).toBe("https://www.iesdouyin.com/share/video/7625447143519604002");
     expect(resolved.url).toBe("https://aweme.snssdk.com/aweme/v1/play/?video_id=modal1");
     expect(resolved.title).toBe("弹窗视频标题");
@@ -240,7 +241,7 @@ describe("resolveDouyinVideo", () => {
       headers: new Headers({ "content-type": "video/mp4" }),
       text: async () => "binary"
     });
-    const resolved = await resolveDouyinVideo("https://v3-web.douyinvod.com/video.mp4", { fetchImpl });
+    const resolved = await resolveDouyinVideo("https://v3-web.douyinvod.com/video.mp4", { fetchImpl, cookie: "ttwid=test" });
     expect(resolved.url).toBe("https://v3-web.douyinvod.com/video.mp4");
   });
 
@@ -251,7 +252,76 @@ describe("resolveDouyinVideo", () => {
       headers: new Headers({ "content-type": "text/html" }),
       text: async () => "<html>no data</html>"
     });
-    await expect(resolveDouyinVideo("https://www.douyin.com/note/123", { fetchImpl }))
+    await expect(resolveDouyinVideo("https://www.douyin.com/note/123", { fetchImpl, cookie: "ttwid=test" }))
       .rejects.toThrow(/图文笔记|已删除|登录/);
+  });
+});
+
+describe("fetchTtwidCookie", () => {
+  it("registers a ttwid and returns the cookie from the callback set-cookie", async () => {
+    const calls: string[] = [];
+    const fetchImpl = async (url: string) => {
+      calls.push(url);
+      if (url.includes("/ttwid/union/register/") && !url.includes("/callback/")) {
+        return new Response(JSON.stringify({
+          status_code: 0,
+          message: "union register success",
+          redirect_url: "https://www.ixigua.com/ttwid/union/register/callback/?ticket=abc"
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(null, {
+        status: 200,
+        headers: { "set-cookie": "ttwid=1%7Cvalue%7C9999999999%7Csig; path=/; max-age=31536000" }
+      });
+    };
+
+    const cookie = await fetchTtwidCookie(fetchImpl);
+    expect(cookie).toBe("ttwid=1%7Cvalue%7C9999999999%7Csig");
+    expect(calls[0]).toContain("/ttwid/union/register/");
+    expect(calls[1]).toContain("/callback/");
+  });
+
+  it("returns undefined when registration has no redirect_url", async () => {
+    const fetchImpl = async () => new Response(JSON.stringify({ status_code: -1 }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
+    expect(await fetchTtwidCookie(fetchImpl)).toBeUndefined();
+  });
+
+  it("returns undefined when the callback sets no ttwid cookie", async () => {
+    let call = 0;
+    const fetchImpl = async () => {
+      call += 1;
+      if (call === 1) {
+        return new Response(JSON.stringify({ redirect_url: "https://example.com/callback" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(null, { status: 200, headers: { "set-cookie": "other=1" } });
+    };
+    expect(await fetchTtwidCookie(fetchImpl)).toBeUndefined();
+  });
+
+  it("survives network errors with undefined instead of throwing", async () => {
+    const fetchImpl = async () => { throw new Error("network down"); };
+    expect(await fetchTtwidCookie(fetchImpl)).toBeUndefined();
+  });
+
+  it("passes the cookie into the share page request when provided", async () => {
+    const seenCookies: string[] = [];
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      seenCookies.push(String(init?.headers && (init.headers as Record<string, string>).cookie || ""));
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/html" }),
+        text: async () => "<html>no data</html>"
+      };
+    };
+    await expect(resolveDouyinVideo("https://v.douyin.com/x/", { fetchImpl, cookie: "ttwid=custom" }))
+      .rejects.toThrow(/图文笔记|已删除|登录/);
+    expect(seenCookies.every((cookie) => cookie === "ttwid=custom")).toBe(true);
   });
 });

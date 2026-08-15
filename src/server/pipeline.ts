@@ -4,14 +4,31 @@ import { config } from "./config.js";
 import { analyze } from "./analysis.js";
 import { transcribe, transcribeFullAudio } from "./asr.js";
 import { downloadUrl } from "./download.js";
-import { updateJob, type AnalysisResult, type Job, type JobProgress } from "./jobs.js";
+import { getJobAbortSignal, updateJob, type AnalysisResult, type Job, type JobProgress } from "./jobs.js";
 import { resolveVideoUrl } from "./resolver.js";
+import { createSemaphore } from "./semaphore.js";
 import { extractAudioSegments, extractFrames, inspectVideo } from "./video.js";
 
+// 限制同时运行的分析任务数，超出部分排队等待。
+// 多个大视频同时抽帧/转写会吃满 CPU 和内存，这里把它们串成有限并发。
+const analysisSlots = createSemaphore(config.maxConcurrentJobs);
+
 export function enqueueAnalysis(job: Job): void {
-  setImmediate(() => runAnalysis(job).catch((error) => {
-    updateJob(job, { status: "failed", error: error instanceof Error ? error.message : String(error), progress: { stage: "failed", percent: 100, detail: error instanceof Error ? error.message : String(error) } });
-  }));
+  setImmediate(async () => {
+    const signal = getJobAbortSignal(job.id);
+    if (signal?.aborted) return;
+    await analysisSlots.acquire();
+    try {
+      if (signal?.aborted) return;
+      await runAnalysis(job, signal);
+    } catch (error) {
+      // 用户取消或任务到期导致的 AbortError 不算失败，直接静默收尾。
+      if (signal?.aborted) return;
+      updateJob(job, { status: "failed", error: error instanceof Error ? error.message : String(error), progress: { stage: "failed", percent: 100, detail: error instanceof Error ? error.message : String(error) } });
+    } finally {
+      analysisSlots.release();
+    }
+  });
 }
 
 interface AnalyzeMediaOptions {
@@ -19,45 +36,54 @@ interface AnalyzeMediaOptions {
   title: string;
   framesDir: string;
   audioDir: string;
+  signal?: AbortSignal;
   onProgress?: (progress: JobProgress) => void;
 }
 
 // 与 job 解耦的媒体分析管线，HTTP 任务与 headless CLI 共用。
 // 输入文件与帧目录的生命周期由调用方负责；音频切片作为中间产物在这里即时清理。
-export async function analyzeMedia({ inputPath, title, framesDir, audioDir, onProgress = () => {} }: AnalyzeMediaOptions): Promise<AnalysisResult> {
+export async function analyzeMedia({ inputPath, title, framesDir, audioDir, signal, onProgress = () => {} }: AnalyzeMediaOptions): Promise<AnalysisResult> {
   onProgress({ stage: "inspecting", percent: 12, detail: "正在读取视频尺寸和时长。" });
-  const media = await inspectVideo(inputPath);
+  const media = await inspectVideo(inputPath, { signal });
   if (!media.hasVideo) throw new Error("这个文件里没有视频画面，请换一个带画面的视频。");
 
+  throwIfAborted(signal);
   onProgress({ stage: "extracting_frames", percent: 30, detail: "从视频里挑出几个视觉切片。" });
-  const frames = await extractFrames(inputPath, framesDir);
+  const frames = await extractFrames(inputPath, framesDir, { signal, durationMs: media.durationMs });
 
+  throwIfAborted(signal);
   onProgress({ stage: "extracting_audio", percent: 46, detail: "把声音整理成适合听写的轨道。" });
   await mkdir(audioDir, { recursive: true });
   let transcript: Awaited<ReturnType<typeof transcribe>> = [];
   if (media.hasAudio) {
     if (config.asrDiarization && config.asrProvider === "dashscope") {
       onProgress({ stage: "transcribing", percent: 60, detail: "正在做说话人分离与听写。" });
-      transcript = await transcribeFullAudio({ inputPath, durationMs: media.durationMs, audioDir, publicBaseUrl: config.publicBaseUrl });
+      transcript = await transcribeFullAudio({ inputPath, audioDir, publicBaseUrl: config.publicBaseUrl, signal });
     } else {
-      const audioSegments = await extractAudioSegments(inputPath, audioDir, media.durationMs);
+      const audioSegments = await extractAudioSegments(inputPath, audioDir, media.durationMs, { signal });
+      throwIfAborted(signal);
       onProgress({ stage: "transcribing", percent: 65, detail: config.asrProvider === "mock" ? "演示听写正在生成。" : "Fun-ASR 正在生成逐句字幕。" });
       transcript = audioSegments.length
-        ? await transcribe({ audioSegments, durationMs: media.durationMs })
+        ? await transcribe({ audioSegments, durationMs: media.durationMs, signal })
         : [];
     }
   } else {
     onProgress({ stage: "transcribing", percent: 65, detail: "视频没有声音，继续理解画面。" });
   }
 
+  throwIfAborted(signal);
   onProgress({ stage: "interpreting", percent: 82, detail: "把声音与画面放回同一条时间线。" });
-  const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir });
+  const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir, signal });
   result.hasSubtitles = Boolean(result.hasSubtitles || media.hasNativeSubtitles);
   await rm(audioDir, { recursive: true, force: true }).catch(() => undefined);
   return result;
 }
 
-async function runAnalysis(job: Job): Promise<void> {
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new DOMException("分析已取消。", "AbortError");
+}
+
+async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
   const framesDir = join(job.dir, "frames");
   const audioDir = join(job.dir, "audio");
   let completed = false;
@@ -66,13 +92,15 @@ async function runAnalysis(job: Job): Promise<void> {
     updateJob(job, { status: "processing" });
     if (job.sourceUrl) {
       // 视频地址任务：在后台解析真实地址并下载，全程回报进度，提交接口不再阻塞
-      const resolved = await resolveVideoUrl(job.sourceUrl);
+      const resolved = await resolveVideoUrl(job.sourceUrl, { signal });
       if (resolved.title) updateJob(job, { title: resolved.title });
+      throwIfAborted(signal);
       updateJob(job, { progress: { stage: "downloading", percent: 8, detail: "正在把视频放入临时空间。" } });
       inputPath = join(job.dir, "input.mp4");
       job.inputPath = inputPath;
       const download = await downloadUrl(resolved.url, inputPath, {
         referer: resolved.referer,
+        signal,
         onProgress: (percent, detail) => updateJob(job, { progress: { stage: "downloading", percent, detail } })
       });
       job.inputMimeType = download.contentType;
@@ -83,6 +111,7 @@ async function runAnalysis(job: Job): Promise<void> {
       title: job.title,
       framesDir,
       audioDir,
+      signal,
       onProgress: (progress) => updateJob(job, { progress })
     });
     updateJob(job, { status: "done", result, progress: { stage: "done", percent: 100, detail: "分析已经完成。" } });

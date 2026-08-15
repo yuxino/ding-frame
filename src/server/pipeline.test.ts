@@ -77,7 +77,7 @@ describe("media analysis pipeline", () => {
     expect(frameFiles.filter((name) => name.endsWith(".jpg"))).toHaveLength(result.frames.length);
     await expect(stat(join(framesDir, result.frames[0].filename))).resolves.toBeTruthy();
     await expect(stat(audioDir)).rejects.toThrow();
-  });
+  }, 30000);
 
   it("rejects files without a video stream with a friendly message", async () => {
     const dir = await mkdtemp(join(os.tmpdir(), "koma-pipeline-run-"));
