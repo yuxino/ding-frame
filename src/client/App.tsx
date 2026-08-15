@@ -86,6 +86,8 @@ const copy = {
     chapters: "Chapter summary",
     chaptersSub: "Click a chapter to jump to that part of the video",
     chaptersCount: "chapters",
+    noChapters: "No chapter summary was generated for this video.",
+    backHome: "Back to home",
     subtitlePanel: "Subtitles",
     subtitlePanelText: "One line at a time. Click any subtitle to jump back to it.",
     playFrom: "Play from",
@@ -177,6 +179,8 @@ const copy = {
     chapters: "内容章节",
     chaptersSub: "点击章节跳到对应内容",
     chaptersCount: "个章节",
+    noChapters: "这次没有生成章节总结。",
+    backHome: "回到首页",
     subtitlePanel: "字幕",
     subtitlePanelText: "每句一行，点击直接跳回对应位置。",
     playFrom: "从",
@@ -216,7 +220,11 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
   return <svg className="glyph" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[name]}</svg>;
 }
 
-function Brand() { return <div className="brand-lockup"><img src="/koma-icon-64.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>KOMA</span></div></div>; }
+function Brand({ onClick, label }: { onClick?: () => void; label?: string }) {
+  return onClick
+    ? <button type="button" className="brand-lockup brand-button" onClick={onClick} aria-label={label}><img src="/koma-icon-64.png" alt="" className="brand-icon" /><span className="brand-text"><strong>Koma</strong><span>KOMA</span></span></button>
+    : <div className="brand-lockup"><img src="/koma-icon-64.png" alt="" className="brand-icon" /><div><strong>Koma</strong><span>KOMA</span></div></div>;
+}
 
 function App() {
   const [language, setLanguage] = useState<Language>(() => window.localStorage.getItem("koma-language") === "zh" ? "zh" : "en");
@@ -252,7 +260,7 @@ function App() {
         }
         if (!response.ok) throw new Error(t.jobMissing);
         setJob(await response.json() as Job);
-      } catch (pollError) { setError(pollError instanceof Error ? pollError.message : String(pollError)); }
+      } catch (pollError) { setError(translateServerError(pollError instanceof Error ? pollError.message : String(pollError), language)); }
     }, 1200);
     return () => window.clearInterval(timer);
   }, [job?.id, job?.status, language, t.jobMissing]);
@@ -306,10 +314,12 @@ function App() {
 
   async function purgeJob() { if (!job?.id) return; await fetch(`/api/jobs/${job.id}`, { method: "DELETE" }); setJob(null); setFile(null); setUrl(""); }
   async function restartAnalysis() { await purgeJob(); window.scrollTo({ top: 0, behavior: "smooth" }); window.setTimeout(() => urlInputRef.current?.focus(), 250); }
+  // 点 Logo 回到首页：清掉当前任务视图但不删除服务端数据（让它按 TTL 自然清理）。
+  function goHome() { setJob(null); setError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
 
   return <div className="app-shell">
-    <header className="site-header"><div className="header-inner"><Brand /><div className="header-actions">
+    <header className="site-header"><div className="header-inner"><Brand onClick={goHome} label={t.backHome} /><div className="header-actions">
       <span className="privacy-pill"><i />{t.privacy}</span>
       <button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
       <button className="header-button" type="button" onClick={() => setShowSettings(true)}><Glyph name="info" size={16} />{t.help}</button>
@@ -368,6 +378,12 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
   const t = copy[language]; const result = job.result as AnalysisResult;
   const [remaining, setRemaining] = useState(Math.max(0, job.expiresAt - Date.now())); const [selectedFrame, setSelectedFrame] = useState(0); const [currentMs, setCurrentMs] = useState(0); const [showSubtitles, setShowSubtitles] = useState(false); const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => { const timer = window.setInterval(() => setRemaining(Math.max(0, job.expiresAt - Date.now())), 1000); return () => window.clearInterval(timer); }, [job.expiresAt]);
+  // 结果页让浏览器标签页显示视频标题
+  useEffect(() => {
+    const previous = document.title;
+    document.title = result.title || (language === "zh" ? "Koma — AI 视频理解" : "Koma — AI Video Understanding");
+    return () => { document.title = previous; };
+  }, [result.title, language]);
   const selected = result.frames[selectedFrame] || result.frames[0];
   useEffect(() => { setShowSubtitles(!result.hasSubtitles); }, [result.hasSubtitles]);
   const activeSubtitle = showSubtitles ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs) : null;
@@ -382,7 +398,7 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
     <div className="frame-strip" aria-label={t.frameTimeline}>{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => syncToTime(frame.atMs)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
-    <section className="chapters"><div className="section-heading"><span>{t.chapters}</span><small>{result.chapters.length} {t.chaptersCount} · {t.chaptersSub}</small></div><div className="chapter-list">{(result.chapters || []).map((chapter, index) => <button type="button" className="chapter" key={`${chapter.startMs}-${index}`} onClick={() => syncToTime(chapter.startMs)}><span className="chapter-rail"><strong>{index + 1}</strong><i>{formatTime(chapter.startMs)} – {formatTime(chapter.endMs)}</i></span><span className="chapter-body"><strong>{chapter.title}</strong><p>{chapter.summary}</p></span><Glyph name="arrow" size={18} /></button>)}</div></section>
+    <section className="chapters"><div className="section-heading"><span>{t.chapters}</span><small>{result.chapters.length ? `${result.chapters.length} ${t.chaptersCount} · ${t.chaptersSub}` : ""}</small></div>{result.chapters.length ? <div className="chapter-list">{(result.chapters || []).map((chapter, index) => <button type="button" className="chapter" key={`${chapter.startMs}-${index}`} onClick={() => syncToTime(chapter.startMs)}><span className="chapter-rail"><strong>{index + 1}</strong><i>{formatTime(chapter.startMs)} – {formatTime(chapter.endMs)}</i></span><span className="chapter-body"><strong>{chapter.title}</strong><p>{chapter.summary}</p></span><Glyph name="arrow" size={18} /></button>)}</div> : <div className="chapter-empty">{t.noChapters}</div>}</section>
   </div>
   <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="clock" size={14} />{Math.ceil(remaining / 60000)} {t.remaining}</div></aside>
   </section>;
@@ -390,6 +406,17 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
 
 function frameIndexAtTime(frames: Frame[], atMs: number): number { let nearest = 0; for (let index = 0; index < frames.length; index += 1) { if (frames[index].atMs > atMs) break; nearest = index; } return nearest; }
 
-function InfoModal({ onClose, language }: { onClose: () => void; language: Language }) { const t = copy[language]; return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button><img src="/koma-icon-64.png" alt="" /><span className="page-label">ABOUT KOMA</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>; }
+function InfoModal({ onClose, language }: { onClose: () => void; language: Language }) {
+  const t = copy[language];
+  const closeRef = useRef<HTMLButtonElement>(null);
+  // 打开时聚焦关闭按钮，支持 Escape 关闭，关闭后焦点留在触发位置由浏览器还原。
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button><img src="/koma-icon-64.png" alt="" /><span className="page-label">ABOUT KOMA</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
+}
 
 export default App;
