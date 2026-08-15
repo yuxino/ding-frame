@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type FormEvent, type DragEvent, type KeyboardEvent, type ChangeEvent } from "react";
+import { translateServerError } from "./errors.js";
+import { formatTime } from "./format.js";
 
 type Language = "en" | "zh";
 
@@ -43,6 +45,9 @@ const copy = {
     temporary: "Stored only while processing",
     starting: "Starting…",
     start: "Analyze video",
+    retry: "Try again",
+    uploading: "Uploading",
+    uploadProgress: "Uploading video",
     missingFile: "Choose a video first.",
     missingUrl: "Paste a video URL first.",
     startFailed: "Could not start the analysis.",
@@ -130,6 +135,9 @@ const copy = {
     temporary: "仅在分析期间暂存",
     starting: "正在放入…",
     start: "开始分析",
+    retry: "重试",
+    uploading: "正在上传",
+    uploadProgress: "正在上传视频",
     missingFile: "先放入一个小视频",
     missingUrl: "先粘贴一个视频地址",
     startFailed: "没有成功开始分析",
@@ -189,11 +197,6 @@ interface Tag { label: string; category: string; atMs: number; }
 interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; highlights: Highlight[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; }
 interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; expiresAt: number; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; result: AnalysisResult | null; error: string | null; }
 
-function formatTime(milliseconds: number | undefined): string {
-  const totalSeconds = Math.max(0, Math.round((milliseconds || 0) / 1000));
-  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
-}
-
 function formatDate(timestamp: number, language: Language): string {
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
 }
@@ -221,6 +224,7 @@ function App() {
   const [url, setUrl] = useState("");
   const [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -239,31 +243,63 @@ function App() {
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" });
+        if (response.status === 404) {
+          // 任务已过期或被清除：停止轮询，标记为失败而不是每 1.2 秒重复报错。
+          setJob((current) => current ? { ...current, status: "failed", error: t.jobMissing } : current);
+          return;
+        }
         if (!response.ok) throw new Error(t.jobMissing);
         setJob(await response.json() as Job);
       } catch (pollError) { setError(pollError instanceof Error ? pollError.message : String(pollError)); }
     }, 1200);
     return () => window.clearInterval(timer);
-  }, [job?.id, job?.status, language]);
+  }, [job?.id, job?.status, language, t.jobMissing]);
 
-  async function startAnalysis(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError(""); setJob(null);
+  async function startAnalysis(event?: FormEvent) {
+    event?.preventDefault(); setBusy(true); setError(""); setJob(null); setUploadPercent(null);
     try {
-      let response: Response;
       if (mode === "upload") {
         if (!file) throw new Error(t.missingFile);
-        const formData = new FormData(); formData.append("video", file);
-        response = await fetch("/api/analyze/upload", { method: "POST", body: formData });
+        const jobId = await uploadWithProgress(file);
+        const jobResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
+        setJob(await jobResponse.json() as Job);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
-        response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim() }) });
+        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim() }) });
+        const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
+        if (!response.ok) throw new Error(body.error || t.startFailed);
+        const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
+        setJob(await jobResponse.json() as Job);
       }
-      const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
-      if (!response.ok) throw new Error(body.error || t.startFailed);
-      const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
-      setJob(await jobResponse.json() as Job);
-    } catch (submitError) { setError(submitError instanceof Error ? submitError.message : String(submitError)); }
-    finally { setBusy(false); }
+    } catch (submitError) {
+      setError(translateServerError(submitError instanceof Error ? submitError.message : String(submitError), language));
+    } finally { setBusy(false); setUploadPercent(null); }
+  }
+
+  // 用 XMLHttpRequest 上传以拿到真实进度；返回创建的任务 id。
+  function uploadWithProgress(video: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/analyze/upload");
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) setUploadPercent(Math.round((event.loaded / event.total) * 100));
+      };
+      xhr.onload = () => {
+        let body: { jobId?: string; error?: string } = {};
+        try { body = JSON.parse(xhr.responseText); } catch { /* 保留空对象走错误分支 */ }
+        if (xhr.status >= 200 && xhr.status < 300 && body.jobId) return resolve(body.jobId);
+        reject(new Error(body.error || t.startFailed));
+      };
+      xhr.onerror = () => reject(new Error(t.startFailed));
+      const formData = new FormData();
+      formData.append("video", video);
+      xhr.send(formData);
+    });
+  }
+
+  async function retryAnalysis() {
+    // 失败后重试：重新提交同一个来源（本地文件或视频地址）。
+    await startAnalysis();
   }
 
   async function purgeJob() { if (!job?.id) return; await fetch(`/api/jobs/${job.id}`, { method: "DELETE" }); setJob(null); setFile(null); setUrl(""); }
@@ -300,21 +336,23 @@ function App() {
             <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
             <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : t.fileHint}</small>
           </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} /><small>{t.urlHint}</small></label>}
-          <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy}>{busy ? t.starting : t.start}<Glyph name="arrow" size={17} /></button></div>
+          <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy}>{busy ? (uploadPercent !== null ? `${t.uploading} ${uploadPercent}%` : t.starting) : t.start}<Glyph name="arrow" size={17} /></button></div>
+          {uploadPercent !== null && <div className="upload-track" aria-label={`${t.uploadProgress}: ${uploadPercent}%`}><span style={{ width: `${uploadPercent}%` }} /></div>}
           {error && <p className="form-error" role="alert">{error}</p>}
         </form>
       </section>}
-      {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={purgeJob} language={language} />}
+      {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={purgeJob} onRetry={retryAnalysis} language={language} />}
       {hasResult && <ResultView job={job} onClear={purgeJob} onRestart={restartAnalysis} language={language} />}
     </main>
     {showSettings && <InfoModal onClose={() => setShowSettings(false)} language={language} />}
   </div>;
 }
 
-function ProgressView({ job, progress, error, onClear, language }: { job: Job; progress: number; error: string; onClear: () => void; language: Language }) {
+function ProgressView({ job, progress, error, onClear, onRetry, language }: { job: Job; progress: number; error: string; onClear: () => void; onRetry: () => void; language: Language }) {
   const t = copy[language];
+  const failed = job.status === "failed";
   return <section className="progress-layout"><div className="progress-copy"><span className="page-label">{job.source === "url" ? t.analyzingRemote : t.analyzingLocal}</span><h1>{t.progressTitle}</h1><p>{t.progressText}</p></div>
-    <div className="progress-card"><div className="progress-mascot"><img src="/koma-icon.png" alt="" /></div><div className="progress-status"><span>{job.progress ? t.stage[job.progress.stage] || t.processing : t.processing}</span><strong>{progress}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{error || job.error}</div>}<div className="process-list"><span className="done">{t.entered}</span><span className={progress >= 35 ? "done" : "current"}>{t.mediaAnalysis}</span><span className={progress >= 100 ? "done" : "waiting"}>{t.readableResult}</span></div><button className="text-button" type="button" onClick={onClear}>{t.cancel}</button></div>
+    <div className="progress-card"><div className="progress-mascot"><img src="/koma-icon.png" alt="" /></div><div className="progress-status"><span>{job.progress ? t.stage[job.progress.stage] || t.processing : t.processing}</span><strong>{progress}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>{job.progress?.detail || t.preparing}</p>{(error || job.error) && <div className="inline-error" role="alert">{translateServerError(error || job.error, language)}</div>}<div className="process-list"><span className="done">{t.entered}</span><span className={progress >= 35 ? "done" : "current"}>{t.mediaAnalysis}</span><span className={progress >= 100 ? "done" : "waiting"}>{t.readableResult}</span></div>{failed ? <div className="retry-row"><button className="primary-button" type="button" onClick={onRetry}>{t.retry}<Glyph name="arrow" size={17} /></button><button className="text-button" type="button" onClick={onClear}>{t.cancel}</button></div> : <button className="text-button" type="button" onClick={onClear}>{t.cancel}</button>}</div>
   </section>;
 }
 
@@ -342,7 +380,7 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
     <div className="frame-strip" aria-label={t.frameTimeline}>{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => syncToTime(frame.atMs)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
-    <section className="highlights"><div className="section-heading"><span>{t.highlights}</span><small>{language === "zh" ? `${result.highlights.length} ${t.highlightsCount}` : `${result.highlights.length} ${t.highlightsCount}`}</small></div>{result.highlights.map((highlight) => <button type="button" className="highlight" key={`${highlight.atMs}-${highlight.title}`} onClick={() => syncToTime(highlight.atMs)}><span className="highlight-time"><Glyph name="play" size={13} />{formatTime(highlight.atMs)}</span><span><strong>{highlight.title}</strong><p>{highlight.detail}</p></span><Glyph name="arrow" size={18} /></button>)}</section>
+    <section className="highlights"><div className="section-heading"><span>{t.highlights}</span><small>{result.highlights.length} {t.highlightsCount}</small></div>{result.highlights.map((highlight) => <button type="button" className="highlight" key={`${highlight.atMs}-${highlight.title}`} onClick={() => syncToTime(highlight.atMs)}><span className="highlight-time"><Glyph name="play" size={13} />{formatTime(highlight.atMs)}</span><span><strong>{highlight.title}</strong><p>{highlight.detail}</p></span><Glyph name="arrow" size={18} /></button>)}</section>
   </div>
   <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="clock" size={14} />{Math.ceil(remaining / 60000)} {t.remaining}</div></aside>
   </section>;
