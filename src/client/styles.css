@@ -198,6 +198,11 @@ button:disabled { cursor: wait; opacity: .55; }
 .info-modal p { color: var(--ink-2); font-size: 13px; line-height: 1.75; }
 .info-modal .modal-muted { color: var(--muted); font-size: 10px; }
 .info-modal .primary-button { margin-top: 6px; }
+.frame-preview { position: relative; width: min(100%, 860px); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: #0b0c0a; box-shadow: 0 30px 90px rgba(0,0,0,.3); }
+.frame-preview > img { display: block; width: 100%; max-height: 62vh; object-fit: contain; background: #0b0c0a; }
+.frame-preview-body { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; background: var(--surface); }
+.frame-preview-body p { margin: 0; color: var(--ink-2); font-size: 12px; line-height: 1.6; }
+.frame-preview-body .primary-button { flex: 0 0 auto; min-height: 38px; }
 
 @keyframes enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 

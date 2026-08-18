@@ -88,6 +88,8 @@ const copy = {
     chaptersCount: "chapters",
     noChapters: "No chapter summary was generated for this video.",
     backHome: "Back to home",
+    framePreview: "Key frame preview",
+    playThisMoment: "Play this moment",
     subtitlePanel: "Subtitles",
     subtitlePanelText: "One line at a time. Click any subtitle to jump back to it.",
     playFrom: "Play from",
@@ -181,6 +183,8 @@ const copy = {
     chaptersCount: "个章节",
     noChapters: "这次没有生成章节总结。",
     backHome: "回到首页",
+    framePreview: "关键帧预览",
+    playThisMoment: "播放这一刻",
     subtitlePanel: "字幕",
     subtitlePanelText: "每句一行，点击直接跳回对应位置。",
     playFrom: "从",
@@ -392,6 +396,7 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
     return () => { document.title = previous; };
   }, [result.title, language]);
   const selected = result.frames[selectedFrame] || result.frames[0];
+  const [previewFrame, setPreviewFrame] = useState<Frame | null>(null);
   useEffect(() => { setShowSubtitles(!result.hasSubtitles); }, [result.hasSubtitles]);
   const activeSubtitle = showSubtitles ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs) : null;
   const countdown = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
@@ -404,11 +409,30 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
     <div className="stat-row"><div><span>{t.duration}</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>{t.frames}</span><strong>{result.frames.length}</strong></div><div><span>{t.subtitleLines}</span><strong>{result.transcript.length}</strong></div><div><span>{t.autoDelete}</span><strong className="countdown">{countdown}</strong></div></div>
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
-    <div className="frame-strip" aria-label={t.frameTimeline}>{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => syncToTime(frame.atMs)}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
+    <div className="frame-strip" aria-label={t.frameTimeline}>{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => { syncToTime(frame.atMs, false); setPreviewFrame(frame); }}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
     <section className="chapters"><div className="section-heading"><span>{t.chapters}</span><small>{result.chapters.length ? `${result.chapters.length} ${t.chaptersCount} · ${t.chaptersSub}` : ""}</small></div>{result.chapters.length ? <div className="chapter-list">{(result.chapters || []).map((chapter, index) => <button type="button" className="chapter" key={`${chapter.startMs}-${index}`} onClick={() => syncToTime(chapter.startMs)}><span className="chapter-rail"><strong>{index + 1}</strong><i>{formatTime(chapter.startMs)} – {formatTime(chapter.endMs)}</i></span><span className="chapter-body"><strong>{chapter.title}</strong><p>{chapter.summary}</p></span><Glyph name="arrow" size={18} /></button>)}</div> : <div className="chapter-empty">{t.noChapters}</div>}</section>
   </div>
   <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="clock" size={14} />{Math.ceil(remaining / 60000)} {t.remaining}</div></aside>
+  {previewFrame && <FramePreview frame={previewFrame} onClose={() => setPreviewFrame(null)} onPlay={() => syncToTime(previewFrame.atMs)} language={language} />}
   </section>;
+}
+
+function FramePreview({ frame, onClose, onPlay, language }: { frame: Frame; onClose: () => void; onPlay: () => void; language: Language }) {
+  const t = copy[language];
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="frame-preview" role="dialog" aria-modal="true" aria-label={t.framePreview} onClick={(event) => event.stopPropagation()}>
+    <button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button>
+    <img src={frame.url} alt={frame.caption || t.keyFrame} />
+    <div className="frame-preview-body"><span className="page-label">{t.framePreview} · {formatTime(frame.atMs)}</span><p>{frame.caption || t.keyFrame}</p><button className="primary-button" type="button" onClick={onPlay}><Glyph name="play" size={15} />{t.playThisMoment}</button></div>
+  </div></div>;
 }
 
 function frameIndexAtTime(frames: Frame[], atMs: number): number { let nearest = 0; for (let index = 0; index < frames.length; index += 1) { if (frames[index].atMs > atMs) break; nearest = index; } return nearest; }
