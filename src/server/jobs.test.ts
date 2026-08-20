@@ -32,10 +32,11 @@ describe("job lifecycle cleanup", () => {
 
   it("stores and serializes a custom analysis specification", async () => {
     const { createJob, deleteJob, serializeJob } = await loadJobs();
-    const analysisSpec = { instruction: "提取商品", outputSchema: { products: [] } };
-    const job = await createJob({ source: "upload", title: "a.mp4", analysisSpec });
+    const analysisSpec = { instruction: "提取商品", outputSchema: { products: [] }, artifactFormats: ["json" as const] };
+    const job = await createJob({ source: "upload", title: "a.mp4", language: "en", analysisSpec });
     expect(job.analysisSpec).toEqual(analysisSpec);
     expect(serializeJob(job)?.analysisSpec).toEqual(analysisSpec);
+    expect(serializeJob(job)?.language).toBe("en");
     await deleteJob(job.id);
   });
 

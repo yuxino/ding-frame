@@ -108,6 +108,13 @@ app.get("/api/admin/jobs", async (request, reply) => {
   return reply.header("cache-control", "no-store").send({ jobs: await listJobHistory(200) });
 });
 
+app.get("/api/admin/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+  if (!requireAdmin(request, reply)) return;
+  const job = await loadJob(request.params.id);
+  if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
+  return reply.header("cache-control", "no-store").send(serializeJob(job));
+});
+
 app.delete("/api/admin/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
   if (!requireAdminMutation(request, reply)) return;
   await deleteJob(request.params.id);

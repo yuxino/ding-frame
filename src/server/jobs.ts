@@ -161,6 +161,7 @@ export function serializeJob(job: Job | undefined) {
     completedAt: job.completedAt,
     status: job.status,
     progress: job.progress,
+    language: job.language,
     analysisSpec: job.analysisSpec,
     providers: {
       asr: { provider: job.providers.asr.provider, model: job.providers.asr.model },

@@ -4,6 +4,7 @@ Koma separates the public product from operations:
 
 - Public visitors submit without an account and receive an unguessable, read-only `/jobs/<id>` replay link.
 - `/admin` is the protected operations console for providers, credentials, jobs, and permanent deletion.
+- Job details show the saved result, extraction instruction, expected JSON shape, requested file formats, and the provider/model snapshot without keys.
 - Koma does not include a public user-account system. Add one only when the product needs per-user ownership, private workspaces, or quotas.
 
 ## Enable the console
@@ -37,6 +38,8 @@ DB_AUTO_CREATE=true
 With `DB_AUTO_CREATE=true`, the configured account may create the `koma` database and Koma creates `koma_settings` and `koma_jobs` on startup. For a least-privilege deployment, create the database once, grant only `koma.*`, and set `DB_AUTO_CREATE=false`.
 
 The database contains encrypted provider settings plus the complete replay record: status, provider snapshot without keys, request, transcript, summary, chapters, tags, extracted JSON, artifact metadata, and storage object keys. It never stores plaintext provider keys or binary media.
+
+The job table loads lightweight metadata. Koma reads a job's complete request and result only after an administrator opens its detail drawer, which also links to the full replay and generated files.
 
 ## Persistent storage
 
