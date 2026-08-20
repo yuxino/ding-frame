@@ -378,7 +378,7 @@ button:disabled { cursor: wait; opacity: .55; }
 @keyframes admin-drawer-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
 
 .modal-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(16,17,15,.45); backdrop-filter: blur(5px); }
-.info-modal { position: relative; width: min(100%, 450px); padding: 30px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 30px 90px rgba(0,0,0,.2); }
+.info-modal { position: relative; width: min(100%, 680px); max-height: min(88vh, 820px); overflow: auto; padding: 30px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 30px 90px rgba(0,0,0,.2); }
 .history-modal { position: relative; display: flex; width: min(100%, 720px); max-height: min(82vh, 760px); flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 30px 90px rgba(0,0,0,.24); }
 .history-modal-head { flex: 0 0 auto; padding: 30px 70px 22px 30px; border-bottom: 1px solid var(--line); }
 .history-modal-head h2 { margin: 8px 0 9px; font-size: 31px; font-weight: 750; letter-spacing: -.05em; }
@@ -404,11 +404,17 @@ button:disabled { cursor: wait; opacity: .55; }
 .history-item-actions .history-delete { color: var(--danger); }
 .history-item-actions .history-delete:hover { border-color: var(--danger); background: #fff7f5; }
 .history-error { flex: 0 0 auto; margin: 0; padding: 12px 18px; border-top: 1px solid #efd8d2; background: #fff7f5; }
-.info-modal > img { width: 52px; height: 52px; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 15px; }
+.info-modal-head { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 16px; align-items: start; padding-right: 35px; }
+.info-modal-head img { width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 15px; }
 .modal-close { position: absolute; top: 14px; right: 14px; display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); background: var(--surface); font-size: 19px; }
-.info-modal h2 { margin: 8px 0 15px; font-size: 30px; font-weight: 750; letter-spacing: -.05em; }
+.info-modal h2 { margin: 6px 0 8px; font-size: 30px; font-weight: 750; letter-spacing: -.05em; }
 .info-modal p { color: var(--ink-2); font-size: 13px; line-height: 1.75; }
-.info-modal .modal-muted { color: var(--muted); font-size: 10px; }
+.info-modal-head p { margin: 0; color: var(--muted); font-size: 11px; }
+.help-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 24px 0 18px; }
+.help-steps section { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fafbf8; }
+.help-steps strong { font-size: 11px; font-weight: 720; }
+.help-steps p { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.info-modal .modal-muted { margin: 0 0 17px; padding: 12px 14px; border-radius: 11px; color: var(--muted); background: var(--surface-soft); font-size: 9px; line-height: 1.65; }
 .info-modal .primary-button { margin-top: 6px; }
 .frame-preview { position: relative; width: min(100%, 860px); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: #0b0c0a; box-shadow: 0 30px 90px rgba(0,0,0,.3); }
 .frame-preview > .modal-close { z-index: 4; color: white; border-color: rgba(255,255,255,.24); background: rgba(0,0,0,.5); }
@@ -477,6 +483,11 @@ button:disabled { cursor: wait; opacity: .55; }
   .history-item { grid-template-columns: 1fr; }
   .history-item-actions { min-width: 0; flex-direction: row; padding: 9px; border-top: 1px solid var(--line); border-left: 0; }
   .history-item-actions button { flex: 1; }
+  .info-modal { max-height: 92vh; padding: 22px 18px; }
+  .info-modal-head { grid-template-columns: 44px minmax(0, 1fr); gap: 12px; padding-right: 30px; }
+  .info-modal-head img { width: 42px; height: 42px; border-radius: 12px; }
+  .info-modal h2 { font-size: 25px; }
+  .help-steps { grid-template-columns: 1fr; margin-top: 19px; }
   .admin-shell .site-header { height: auto; min-height: 64px; }
   .admin-shell .header-inner { min-height: 64px; padding: 8px 0; }
   .admin-shell .header-actions { gap: 5px; }

@@ -133,9 +133,15 @@ const copy = {
     noSpeech: "No usable speech was detected in this video.",
     remaining: "Permanent replay · manage your own jobs from this browser",
     close: "Close",
-    aboutTitle: "AI video understanding, without the clutter.",
-    aboutText: "Koma deletes intermediate audio after analysis, then keeps the source video, key frames, result, and generated files for replay. This browser can list and delete its own jobs; anyone else with the unguessable result link can only view it.",
-    aboutMuted: "Configure any supported ASR and vision providers for real analysis. Without model keys, Koma runs the default summary flow with demo data; custom extraction needs a real vision model.",
+    aboutTitle: "How to use Koma",
+    aboutText: "From a video to a replayable analysis and ready-to-use files.",
+    aboutSteps: [
+      { title: "1 · Submit a video", text: "Upload a local video or paste a public URL. Open Custom extraction to specify the data, JSON shape, output language, and JSON, CSV, Markdown, SRT, or TXT files you need." },
+      { title: "2 · Review the result", text: "Koma combines audio and key frames into a summary, chapters, tags, subtitles, structured data, and generated files. Click any timestamp, subtitle, chapter, tag, or key frame to return to that moment." },
+      { title: "3 · Return from My jobs", text: "My jobs lists analyses submitted from this browser. You can reopen a running or completed job and permanently delete your own video, frames, result, and generated files." },
+      { title: "4 · Share or administer", text: "Anyone with an unguessable replay link can view the result but cannot delete it. Administrators use Manage to configure providers and encrypted keys, inspect every job's request and result, and perform global deletion." }
+    ],
+    aboutMuted: "Browser ownership is anonymous and stored in an HttpOnly cookie. Clearing site data or switching browsers/devices removes access to My jobs, but saved replay links still work. Jobs created before this feature remain admin-only.",
     gotIt: "Got it",
     language: "中文"
   },
@@ -265,9 +271,15 @@ const copy = {
     noSpeech: "这段视频没有识别到可用人声。",
     remaining: "永久回看 · 可在这个浏览器管理自己的任务",
     close: "关闭",
-    aboutTitle: "AI 视频理解工作台",
-    aboutText: "中间音频会在分析后立即删除；原视频、关键帧、结果和生成文件会持久保存。这个浏览器可以查看和删除自己提交的任务；其他拿到不可猜结果链接的人只能回看。",
-    aboutMuted: "配置任意受支持的听写与视觉模型后即可使用真实分析；没有模型 Key 时可演示默认总结流程，自定义提取需要真实视觉模型。",
+    aboutTitle: "如何使用 Koma",
+    aboutText: "从一段视频，得到可回看、可定位、可下载的完整分析结果。",
+    aboutSteps: [
+      { title: "1 · 提交视频", text: "上传本地视频或粘贴公开视频地址。展开“自定义提取”后，可以指定要抓取的数据、JSON 结构、返回语言，以及 JSON、CSV、Markdown、SRT、TXT 文件。" },
+      { title: "2 · 查看分析结果", text: "Koma 会结合声音和关键帧生成总结、章节、标签、字幕、结构化数据与文件。点击时间、字幕、章节、标签或关键帧，都能跳回视频对应位置。" },
+      { title: "3 · 从“我的任务”回来", text: "“我的任务”会列出这个浏览器提交的分析。可以重新打开执行中或已完成的任务，也可以永久删除自己的原视频、关键帧、结果和生成文件。" },
+      { title: "4 · 分享与管理", text: "拿到不可猜回看链接的人可以查看结果，但不能删除。管理员从“管理”进入后台，配置 Provider 和加密 Key，查看全部任务的要求与结果，并执行全局删除。" }
+    ],
+    aboutMuted: "用户归属通过 HttpOnly 匿名 Cookie 保存在当前浏览器。清除网站数据或换浏览器、换设备后，“我的任务”不会同步，但保存的回看链接仍可使用；此功能上线前的旧任务只在管理后台显示。",
     gotIt: "知道了",
     language: "EN"
   }
@@ -729,7 +741,7 @@ function InfoModal({ onClose, language }: { onClose: () => void; language: Langu
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button><img src="/koma-icon-64.png" alt="" /><span className="page-label">ABOUT KOMA</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title" onClick={(event) => event.stopPropagation()}><button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button><div className="info-modal-head"><img src="/koma-icon-64.png" alt="" /><div><span className="page-label">KOMA GUIDE</span><h2 id="info-title">{t.aboutTitle}</h2><p>{t.aboutText}</p></div></div><div className="help-steps">{t.aboutSteps.map((step) => <section key={step.title}><strong>{step.title}</strong><p>{step.text}</p></section>)}</div><p className="modal-muted">{t.aboutMuted}</p><button className="primary-button" type="button" onClick={onClose}>{t.gotIt}<Glyph name="arrow" size={17} /></button></div></div>;
 }
 
 export default App;
