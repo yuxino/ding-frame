@@ -105,10 +105,41 @@ jobs:
           envs: APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY,ADMIN_PASSWORD,KOMA_CONFIG_SECRET,DB_DRIVER,DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,DB_SSL,DB_AUTO_CREATE,STORAGE_DRIVER,LOCAL_STORAGE_PATH,OSS_REGION,OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET,OSS_UPLOAD_PREFIX,OSS_PUBLIC_BASE_URL
           script: |
             set -e
+            runtime_version="22.13.1"
+            runtime_root="$HOME/koma-runtime/node-v$runtime_version"
+            node_bin="$runtime_root/bin/node"
+            if [ ! -x "$node_bin" ]; then
+              case "$(uname -m)" in
+                x86_64) runtime_arch="x64" ;;
+                aarch64|arm64) runtime_arch="arm64" ;;
+                *) echo "Unsupported server architecture."; exit 1 ;;
+              esac
+              mkdir -p "$HOME/koma-runtime"
+              install_dir="$(mktemp -d "$HOME/koma-runtime/.install.XXXXXX")"
+              archive="node-v$runtime_version-linux-$runtime_arch.tar.xz"
+              cd "$install_dir"
+              curl -fsSLO "https://nodejs.org/dist/v$runtime_version/$archive"
+              curl -fsSLO "https://nodejs.org/dist/v$runtime_version/SHASUMS256.txt"
+              grep "  $archive$" SHASUMS256.txt | sha256sum -c - >/dev/null
+              tar -xJf "$archive"
+              mv "node-v$runtime_version-linux-$runtime_arch" "$runtime_root"
+              find "$install_dir" -depth -delete
+            fi
+            export PATH="$runtime_root/bin:$PATH"
             cd ${{ steps.deploy-meta.outputs.deploy_target }}
             npm install --omit=dev --no-audit --no-fund --prefer-offline
-            node scripts/write-deployment-env.mjs .env
+            "$node_bin" scripts/write-deployment-env.mjs .env
+            unset PORT APP_PORT ASR_PROVIDER ASR_API_KEY ASR_BASE_URL ASR_MODEL
+            unset DASHSCOPE_API_KEY GROQ_API_KEY OPENAI_API_KEY
+            unset VISION_PROVIDER VISION_API_KEY VISION_BASE_URL VISION_MODEL
+            unset GEMINI_API_KEY OPENROUTER_API_KEY PUBLIC_BASE_URL ASR_DIARIZATION
+            unset DEMO_REQUESTS_PER_IP_PER_DAY ADMIN_PASSWORD KOMA_CONFIG_SECRET
+            unset DB_DRIVER KOMA_DATABASE_PATH DB_HOST DB_PORT DB_USER DB_PASSWORD
+            unset DB_NAME DB_SSL DB_CONNECTION_LIMIT DB_AUTO_CREATE
+            unset STORAGE_DRIVER LOCAL_STORAGE_PATH OSS_REGION OSS_ACCESS_KEY_ID
+            unset OSS_ACCESS_KEY_SECRET OSS_BUCKET OSS_UPLOAD_PREFIX OSS_PUBLIC_BASE_URL
+            unset OSS_SIGNED_URL_SECONDS OSS_TIMEOUT_MS TRUST_PROXY
             pm2 delete ding-frame 2>/dev/null || true
             pm2 delete koma 2>/dev/null || true
-            pm2 start dist-server/index.js --name koma
+            pm2 start dist-server/index.js --name koma --interpreter "$node_bin"
             pm2 save
