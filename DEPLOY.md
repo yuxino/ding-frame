@@ -80,7 +80,7 @@ nginx -t && systemctl reload nginx
 
 ## Deployment
 
-The GitHub Actions workflow builds the application, copies the required files to `~/koma`, installs production dependencies, writes `.env`, and reloads the PM2 process.
+The GitHub Actions workflow builds the application, copies the required files to `~/koma`, installs production dependencies, writes `.env`, and reloads the PM2 process. Secrets are read when the workflow runs, so redeploy after adding or changing any runtime Secret.
 
 Equivalent PM2 command:
 
