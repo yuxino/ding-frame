@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
 
 export interface PersistedJobRecord {
@@ -216,6 +216,7 @@ async function initializeSelectedDatabase(): Promise<void> {
   } else {
     const path = process.env.KOMA_DATABASE_PATH || join(process.cwd(), "data", "koma.sqlite");
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const { DatabaseSync } = await import("node:sqlite");
     sqliteDatabase = new DatabaseSync(path);
     sqliteDatabase.exec(`
       PRAGMA journal_mode = WAL;
