@@ -14,7 +14,8 @@ import { extractUrlFromText } from "./resolver.js";
 import { normalizeVideoUrl } from "./url-source.js";
 import { parseByteRange } from "./video-stream.js";
 import { createDailyLimiter } from "./rate-limit.js";
-import { parseAnalysisSpec } from "./analysis-spec.js";
+import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis-spec.js";
+import { contentDisposition } from "./artifacts.js";
 
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024, trustProxy: config.trustProxy });
 const demoLimiter = createDailyLimiter(config.demoRequestsPerIpPerDay);
@@ -28,7 +29,7 @@ app.get("/api/health", async () => ({
   analysisProvider: config.visionProvider,
   models: { asr: config.asrModel || null, vision: config.visionModel || null },
   limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds, resultTtlSeconds: config.resultTtlSeconds },
-  features: { customExtraction: true, rawExtractionEndpoint: true },
+  features: { customExtraction: true, rawExtractionEndpoint: true, downloadableArtifacts: true, artifactFormats: ARTIFACT_FORMATS },
   configured: { asr: asrIsConfigured(), vision: analysisIsConfigured(), analysis: analysisIsConfigured() },
   demoLimitPerIpPerDay: config.demoRequestsPerIpPerDay || null,
   mock: { asr: config.asrProvider === "mock", vision: config.visionProvider === "mock", analysis: config.visionProvider === "mock" }
@@ -42,7 +43,8 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
     if (!part.mimetype.startsWith("video/")) return reply.code(415).send({ error: "请放入视频文件。" });
     const analysisSpec = parseAnalysisSpec({
       instruction: multipartFieldValue(part.fields, "instruction"),
-      outputSchema: multipartFieldValue(part.fields, "outputSchema")
+      outputSchema: multipartFieldValue(part.fields, "outputSchema"),
+      artifactFormats: multipartFieldValue(part.fields, "artifactFormats")
     });
     if (!acceptDemoRequest(request, reply)) return;
     const language = requestLanguage((request.query as { lang?: string } | undefined)?.lang);
@@ -63,11 +65,11 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
 app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
   try {
-    const body = request.body as { url?: unknown; lang?: unknown; instruction?: unknown; outputSchema?: unknown } | undefined;
+    const body = request.body as { url?: unknown; lang?: unknown; instruction?: unknown; outputSchema?: unknown; artifactFormats?: unknown } | undefined;
     const rawUrl = body?.url;
     const url = normalizeVideoUrl(extractUrlFromText(rawUrl) || (typeof rawUrl === "string" ? rawUrl.trim() : ""));
     validateVideoUrl(url);
-    const analysisSpec = parseAnalysisSpec({ instruction: body?.instruction, outputSchema: body?.outputSchema });
+    const analysisSpec = parseAnalysisSpec({ instruction: body?.instruction, outputSchema: body?.outputSchema, artifactFormats: body?.artifactFormats });
     if (!acceptDemoRequest(request, reply)) return;
     job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang), analysisSpec });
     job.sourceUrl = url;
@@ -95,6 +97,19 @@ app.get("/api/jobs/:id/extraction", async (request: FastifyRequest<{ Params: { i
     return reply.code(404).send({ error: "这次任务没有请求结构化提取。" });
   }
   return reply.header("cache-control", "no-store").type("application/json; charset=utf-8").send(JSON.stringify(job.result.extractedData));
+});
+
+app.get("/api/jobs/:id/artifacts/:artifactId", async (request: FastifyRequest<{ Params: { id: string; artifactId: string } }>, reply: FastifyReply) => {
+  const job = getJob(request.params.id);
+  if (!job) return reply.code(404).send({ error: "这次分析已经消失了。" });
+  if (job.status !== "done" || !job.result) return reply.code(409).send({ error: "产物文件还没有生成完成。" });
+  const artifact = job.result.artifacts?.find((item) => item.id === request.params.artifactId);
+  if (!artifact) return reply.code(404).send({ error: "找不到这个产物文件。" });
+  return reply
+    .header("cache-control", "no-store")
+    .header("content-disposition", contentDisposition(artifact.name))
+    .type(artifact.mimeType)
+    .send(artifact.content);
 });
 
 app.delete("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {

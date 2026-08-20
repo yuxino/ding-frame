@@ -121,6 +121,7 @@ Vision services must support `POST /chat/completions` and `image_url`. Transcrip
 | `VISION_MAX_FRAMES` | `10` | Frames sent to vision; capped at five for Groq |
 | `VISION_TRANSCRIPT_CHARS` | `30000` | Transcript characters sent to vision |
 | `VISION_MAX_TOKENS` | `2000` | Vision output limit |
+| `ARTIFACT_MAX_TOKENS` | `6000` | Vision output limit when file artifacts are explicitly requested; ordinary summaries keep the smaller limit above |
 | `MAX_CONCURRENT_JOBS` | `2` | Concurrent analysis jobs |
 | `RESULT_TTL_SECONDS` | `1200` | Result retention time |
 | `DEMO_REQUESTS_PER_IP_PER_DAY` | `0` | Single-node daily submissions per IP; 0 disables it |

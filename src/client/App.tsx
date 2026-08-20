@@ -23,7 +23,7 @@ const copy = {
     help: "How it works",
     badge: "AI VIDEO UNDERSTANDING",
     hero: "Understand a video from the moments that matter.",
-    intro: "Drop in a video. Koma pulls out key frames, transcribes speech, finds important moments, and turns everything into a timeline you can jump through.",
+    intro: "Drop in a video. Koma builds a jumpable timeline, or follows your own request to extract structured data and downloadable files.",
     keyFrames: "Key frames",
     keyFramesSub: "See what matters",
     subtitles: "Subtitles",
@@ -42,12 +42,14 @@ const copy = {
     urlHint: "Supports Douyin share links, Bilibili, YouTube and other public video URLs.",
     temporary: "Stored only while processing",
     customExtract: "Custom extraction",
-    customHint: "Ask for specific data and define the JSON you want back",
+    customHint: "Ask for specific data, JSON, subtitles, reports, or downloadable files",
     analysisRequirement: "Analysis requirement",
     instructionPlaceholder: "Example: Extract every product mentioned, its price, and the first timestamp where it appears.",
     outputShape: "Expected JSON shape (optional)",
     schemaPlaceholder: '{\n  "products": [\n    { "name": "string", "price": 0, "atMs": 0 }\n  ]\n}',
     schemaHint: "Paste a JSON example or JSON Schema. Field names and nesting will be preserved.",
+    outputFiles: "Downloadable files (optional)",
+    outputFilesHint: "Generate complete text files from the same analysis. Select more than one if needed.",
     invalidSchema: "The expected JSON shape is not valid JSON.",
     starting: "Starting…",
     start: "Analyze video",
@@ -78,6 +80,9 @@ const copy = {
     copyJson: "Copy JSON",
     copied: "Copied",
     downloadJson: "Download JSON",
+    generatedFiles: "GENERATED FILES",
+    generatedFilesSub: "Download ready-to-use analysis outputs",
+    downloadFile: "Download",
     duration: "Duration",
     frames: "Key frames",
     subtitleLines: "Subtitle lines",
@@ -92,6 +97,12 @@ const copy = {
     subtitlesOff: "Turn subtitles on",
     reviewing: "Reviewing video",
     frameTimeline: "Key frame timeline",
+    keyFrameGallery: "Key frame gallery",
+    keyFrameGallerySub: "Click any frame to enlarge and inspect it",
+    clickToEnlarge: "Click to enlarge",
+    openOriginal: "Open original",
+    previousFrame: "Previous frame",
+    nextFrame: "Next frame",
     jumpTo: "Jump to",
     keyFrame: "key frame",
     chapters: "Chapter summary",
@@ -129,7 +140,7 @@ const copy = {
     help: "使用说明",
     badge: "AI 视频理解",
     hero: "从关键瞬间，看懂一段视频。",
-    intro: "放入一段视频。Koma 会提取关键画面、转写语音、标出重点，并整理成一条可以直接跳转回看的时间线。",
+    intro: "放入一段视频。Koma 可以整理可跳转的时间线，也可以按你的要求提取结构化数据并生成可下载文件。",
     keyFrames: "关键帧",
     keyFramesSub: "快速理解画面",
     subtitles: "逐句字幕",
@@ -148,12 +159,14 @@ const copy = {
     urlHint: "支持抖音分享链接、B站、YouTube 等公开链接与视频直链。",
     temporary: "仅在分析期间暂存",
     customExtract: "自定义提取",
-    customHint: "写下分析要求，也可以指定要返回的 JSON",
+    customHint: "写下分析要求，可返回 JSON、字幕、报告或可下载文件",
     analysisRequirement: "分析要求",
     instructionPlaceholder: "例如：提取视频中出现的所有商品、价格，以及首次出现的时间。",
     outputShape: "期望 JSON 结构（可选）",
     schemaPlaceholder: '{\n  "products": [\n    { "name": "string", "price": 0, "atMs": 0 }\n  ]\n}',
     schemaHint: "可粘贴 JSON 示例或 JSON Schema；字段名和嵌套结构会被保留。",
+    outputFiles: "输出文件（可选）",
+    outputFilesHint: "基于同一次分析生成完整文本文件，可以多选。",
     invalidSchema: "期望 JSON 结构不是有效 JSON。",
     starting: "正在放入…",
     start: "开始分析",
@@ -184,6 +197,9 @@ const copy = {
     copyJson: "复制 JSON",
     copied: "已复制",
     downloadJson: "下载 JSON",
+    generatedFiles: "生成的文件",
+    generatedFilesSub: "可直接下载使用的分析产物",
+    downloadFile: "下载",
     duration: "视频时长",
     frames: "关键画面",
     subtitleLines: "字幕句数",
@@ -198,6 +214,12 @@ const copy = {
     subtitlesOff: "开启字幕",
     reviewing: "正在回看视频",
     frameTimeline: "关键帧时间线",
+    keyFrameGallery: "关键帧画廊",
+    keyFrameGallerySub: "点击任意关键帧即可放大查看",
+    clickToEnlarge: "点击放大",
+    openOriginal: "查看原图",
+    previousFrame: "上一张关键帧",
+    nextFrame: "下一张关键帧",
     jumpTo: "跳到",
     keyFrame: "关键帧",
     chapters: "内容章节",
@@ -226,8 +248,10 @@ interface TranscriptLine { startMs: number; endMs: number; text: string; speaker
 interface Frame { filename: string; atMs: number; caption?: string; url: string; }
 interface Chapter { startMs: number; endMs: number; title: string; summary: string; }
 interface Tag { label: string; category: string; atMs: number; }
-interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; extractedData?: unknown; }
-interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; expiresAt: number; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown }; result: AnalysisResult | null; error: string | null; }
+type ArtifactFormat = "json" | "csv" | "markdown" | "srt" | "text";
+interface Artifact { id: string; name: string; format: ArtifactFormat; mimeType: string; language?: string; sizeBytes: number; downloadUrl: string; }
+interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; extractedData?: unknown; artifacts?: Artifact[]; }
+interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; expiresAt: number; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; }
 interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number; resultTtlSeconds?: number }; }
 
 function parseOutputSchema(value: string, errorMessage: string): unknown {
@@ -246,7 +270,7 @@ function formatDate(timestamp: number, language: Language): string {
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
 }
 
-type GlyphName = "arrow" | "clock" | "frame" | "info" | "link" | "play" | "spark" | "trash" | "upload" | "voice" | "cc";
+type GlyphName = "arrow" | "clock" | "frame" | "info" | "link" | "play" | "spark" | "trash" | "upload" | "voice" | "cc" | "zoom";
 function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
   const icons: Record<GlyphName, ReactNode> = {
     arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>, clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></>,
@@ -254,7 +278,8 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
     info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></>, link: <><path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15" /><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15" /></>,
     play: <path d="m9 7 8 5-8 5Z" />, spark: <><path d="m12 3 1.2 4.1a5 5 0 0 0 3.7 3.7L21 12l-4.1 1.2a5 5 0 0 0-3.7 3.7L12 21l-1.2-4.1a5 5 0 0 0-3.7-3.7L3 12l4.1-1.2a5 5 0 0 0 3.7-3.7Z" /></>,
     trash: <><path d="M4 7h16" /><path d="m9 7 1-3h4l1 3" /><path d="m6 7 1 13h10l1-13" /><path d="M10 11v5M14 11v5" /></>, upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4" /></>,
-    voice: <><path d="M9 5v14" /><path d="M5 9v6" /><path d="M13 8v8" /><path d="M17 6v12" /><path d="M21 10v4" /></>, cc: <><rect x="2" y="6" width="20" height="12" rx="2.5" /><path d="M8.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /><path d="M15.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /></>
+    voice: <><path d="M9 5v14" /><path d="M5 9v6" /><path d="M13 8v8" /><path d="M17 6v12" /><path d="M21 10v4" /></>, cc: <><rect x="2" y="6" width="20" height="12" rx="2.5" /><path d="M8.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /><path d="M15.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /></>,
+    zoom: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.2 4.2" /><path d="M10.8 7.8v6M7.8 10.8h6" /></>
   };
   return <svg className="glyph" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[name]}</svg>;
 }
@@ -279,6 +304,7 @@ function App() {
   const [showCustomExtraction, setShowCustomExtraction] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [outputSchema, setOutputSchema] = useState("");
+  const [artifactFormats, setArtifactFormats] = useState<ArtifactFormat[]>([]);
   const [serviceInfo, setServiceInfo] = useState<ServiceInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -333,7 +359,7 @@ function App() {
         setJob(await jobResponse.json() as Job);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
-        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: instruction.trim() || undefined, outputSchema: parsedOutputSchema }) });
+        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: instruction.trim() || undefined, outputSchema: parsedOutputSchema, artifactFormats }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
         if (!response.ok) throw new Error(body.error || t.startFailed);
         const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
@@ -364,6 +390,7 @@ function App() {
       // so append extraction fields before the video part.
       if (instruction.trim()) formData.append("instruction", instruction.trim());
       if (parsedOutputSchema !== undefined) formData.append("outputSchema", JSON.stringify(parsedOutputSchema));
+      if (artifactFormats.length) formData.append("artifactFormats", JSON.stringify(artifactFormats));
       formData.append("video", video);
       xhr.send(formData);
     });
@@ -386,6 +413,9 @@ function App() {
   // 点 Logo 回到首页：清掉当前任务视图但不删除服务端数据（让它按 TTL 自然清理）。
   function goHome() { setJob(null); setError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
+  function toggleArtifactFormat(format: ArtifactFormat) {
+    setArtifactFormats((current) => current.includes(format) ? current.filter((item) => item !== format) : [...current, format]);
+  }
 
   return <div className="app-shell">
     <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
@@ -417,11 +447,12 @@ function App() {
             <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
             <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : fileHint}</small>
           </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} /><small>{t.urlHint}</small></label>}
-          <div className={`custom-extraction ${showCustomExtraction ? "open" : ""} ${instruction.trim() || outputSchema.trim() ? "configured" : ""}`}>
+          <div className={`custom-extraction ${showCustomExtraction ? "open" : ""} ${instruction.trim() || outputSchema.trim() || artifactFormats.length ? "configured" : ""}`}>
             <button className="custom-extraction-toggle" type="button" aria-expanded={showCustomExtraction} onClick={() => setShowCustomExtraction((value) => !value)}><span><Glyph name="spark" size={15} /><strong>{t.customExtract}</strong><small>{t.customHint}</small></span><i>{showCustomExtraction ? "−" : "+"}</i></button>
             {showCustomExtraction && <div className="custom-extraction-fields">
               <label><span>{t.analysisRequirement}</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} maxLength={4000} rows={3} placeholder={t.instructionPlaceholder} /></label>
               <label><span>{t.outputShape}</span><textarea className="schema-input" value={outputSchema} onChange={(event) => setOutputSchema(event.target.value)} maxLength={12000} rows={6} spellCheck={false} placeholder={t.schemaPlaceholder} /><small>{t.schemaHint}</small></label>
+              <fieldset className="artifact-format-field"><legend>{t.outputFiles}</legend><small>{t.outputFilesHint}</small><div className="artifact-format-list">{(["json", "csv", "markdown", "srt", "text"] as ArtifactFormat[]).map((format) => <button key={format} type="button" className={artifactFormats.includes(format) ? "selected" : ""} aria-pressed={artifactFormats.includes(format)} onClick={() => toggleArtifactFormat(format)}>{format === "markdown" ? "Markdown" : format.toUpperCase()}</button>)}</div></fieldset>
             </div>}
           </div>
           <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy}>{busy ? (uploadPercent !== null ? `${t.uploading} ${uploadPercent}%` : t.starting) : t.start}<Glyph name="arrow" size={17} /></button></div>
@@ -472,14 +503,15 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
     <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={onClear}><Glyph name="trash" size={16} />{t.clear}</button></div></div>
     <div className="summary-block"><span><Glyph name="spark" size={15} />{t.aiSummary}</span><p>{result.summary}</p></div>
     {Object.prototype.hasOwnProperty.call(result, "extractedData") && <StructuredData data={result.extractedData} jobId={job.id} language={language} />}
+    {result.artifacts?.length ? <ArtifactPanel artifacts={result.artifacts} language={language} /> : null}
     <div className="stat-row"><div><span>{t.duration}</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>{t.frames}</span><strong>{result.frames.length}</strong></div><div><span>{t.subtitleLines}</span><strong>{result.transcript.length}</strong></div><div><span>{t.autoDelete}</span><strong className="countdown">{countdown}</strong></div></div>
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
-    <div className="frame-strip" aria-label={t.frameTimeline}>{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => { syncToTime(frame.atMs, false); setPreviewFrame(frame); }}><img src={frame.url} alt="" /><span>{formatTime(frame.atMs)}</span></button>)}</div>
+    <section className="keyframe-panel" aria-label={t.frameTimeline}><div className="section-heading"><span>{t.keyFrameGallery}</span><small>{t.keyFrameGallerySub}</small></div><div className="frame-gallery">{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => { syncToTime(frame.atMs, false); setPreviewFrame(frame); }}><span className="frame-gallery-image"><img src={frame.url} alt={frame.caption || t.keyFrame} /><i>{formatTime(frame.atMs)}</i><em><Glyph name="zoom" size={14} />{t.clickToEnlarge}</em></span><strong>{frame.caption || `${t.keyFrame} ${index + 1}`}</strong></button>)}</div></section>
     <section className="chapters"><div className="section-heading"><span>{t.chapters}</span><small>{result.chapters.length ? `${result.chapters.length} ${t.chaptersCount} · ${t.chaptersSub}` : ""}</small></div>{result.chapters.length ? <div className="chapter-list">{(result.chapters || []).map((chapter, index) => <button type="button" className="chapter" key={`${chapter.startMs}-${index}`} onClick={() => syncToTime(chapter.startMs)}><span className="chapter-rail"><strong>{index + 1}</strong><i>{formatTime(chapter.startMs)} – {formatTime(chapter.endMs)}</i></span><span className="chapter-body"><strong>{chapter.title}</strong><p>{chapter.summary}</p></span><Glyph name="arrow" size={18} /></button>)}</div> : <div className="chapter-empty">{t.noChapters}</div>}</section>
   </div>
   <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="clock" size={14} />{Math.ceil(remaining / 60000)} {t.remaining}</div></aside>
-  {previewFrame && <FramePreview frame={previewFrame} onClose={() => setPreviewFrame(null)} onPlay={() => syncToTime(previewFrame.atMs)} language={language} />}
+  {previewFrame && <FramePreview frame={previewFrame} onClose={() => setPreviewFrame(null)} onPlay={() => { syncToTime(previewFrame.atMs); setPreviewFrame(null); }} onPrevious={() => { const index = result.frames.findIndex((frame) => frame.url === previewFrame.url); setPreviewFrame(result.frames[(index - 1 + result.frames.length) % result.frames.length]); }} onNext={() => { const index = result.frames.findIndex((frame) => frame.url === previewFrame.url); setPreviewFrame(result.frames[(index + 1) % result.frames.length]); }} language={language} />}
   </section>;
 }
 
@@ -508,25 +540,43 @@ function StructuredData({ data, jobId, language }: { data: unknown; jobId: strin
   </section>;
 }
 
-function FramePreview({ frame, onClose, onPlay, language }: { frame: Frame; onClose: () => void; onPlay: () => void; language: Language }) {
+function ArtifactPanel({ artifacts, language }: { artifacts: Artifact[]; language: Language }) {
+  const t = copy[language];
+  return <section className="artifact-panel">
+    <div className="section-heading"><span>{t.generatedFiles}</span><small>{t.generatedFilesSub}</small></div>
+    <div className="artifact-list">{artifacts.map((artifact) => <a key={artifact.id} href={artifact.downloadUrl} download={artifact.name}><span><strong>{artifact.name}</strong><small>{artifact.format.toUpperCase()}{artifact.language ? ` · ${artifact.language}` : ""} · {formatBytes(artifact.sizeBytes)}</small></span><em>{t.downloadFile}<Glyph name="arrow" size={14} /></em></a>)}</div>
+  </section>;
+}
+
+function FramePreview({ frame, onClose, onPlay, onPrevious, onNext, language }: { frame: Frame; onClose: () => void; onPlay: () => void; onPrevious: () => void; onNext: () => void; language: Language }) {
   const t = copy[language];
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
+  const onPreviousRef = useRef(onPrevious);
+  const onNextRef = useRef(onNext);
   onCloseRef.current = onClose;
+  onPreviousRef.current = onPrevious;
+  onNextRef.current = onNext;
   useEffect(() => {
     closeRef.current?.focus();
-    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); if (event.key === "ArrowLeft") onPreviousRef.current(); if (event.key === "ArrowRight") onNextRef.current(); };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
   return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="frame-preview" role="dialog" aria-modal="true" aria-label={t.framePreview} onClick={(event) => event.stopPropagation()}>
     <button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button>
-    <img src={frame.url} alt={frame.caption || t.keyFrame} />
-    <div className="frame-preview-body"><span className="page-label">{t.framePreview} · {formatTime(frame.atMs)}</span><p>{frame.caption || t.keyFrame}</p><button className="primary-button" type="button" onClick={onPlay}><Glyph name="play" size={15} />{t.playThisMoment}</button></div>
+    <div className="frame-preview-image"><img src={frame.url} alt={frame.caption || t.keyFrame} /><button className="frame-nav previous" type="button" onClick={onPrevious} aria-label={t.previousFrame}>‹</button><button className="frame-nav next" type="button" onClick={onNext} aria-label={t.nextFrame}>›</button></div>
+    <div className="frame-preview-body"><span className="page-label">{t.framePreview} · {formatTime(frame.atMs)}</span><p>{frame.caption || t.keyFrame}</p><div className="frame-preview-actions"><a href={frame.url} target="_blank" rel="noreferrer">{t.openOriginal}</a><button className="primary-button" type="button" onClick={onPlay}><Glyph name="play" size={15} />{t.playThisMoment}</button></div></div>
   </div></div>;
 }
 
 function frameIndexAtTime(frames: Frame[], atMs: number): number { let nearest = 0; for (let index = 0; index < frames.length; index += 1) { if (frames[index].atMs > atMs) break; nearest = index; } return nearest; }
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 function InfoModal({ onClose, language }: { onClose: () => void; language: Language }) {
   const t = copy[language];

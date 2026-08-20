@@ -1,14 +1,19 @@
 export const MAX_ANALYSIS_INSTRUCTION_CHARS = 4_000;
 export const MAX_OUTPUT_SCHEMA_CHARS = 12_000;
+export const ARTIFACT_FORMATS = ["json", "csv", "markdown", "srt", "text"] as const;
+export type ArtifactFormat = typeof ARTIFACT_FORMATS[number];
 
 export interface AnalysisSpec {
   instruction?: string;
   outputSchema?: unknown;
+  /** Optional downloadable text artifacts requested in addition to extractedData. */
+  artifactFormats?: ArtifactFormat[];
 }
 
 interface AnalysisSpecInput {
   instruction?: unknown;
   outputSchema?: unknown;
+  artifactFormats?: unknown;
 }
 
 /**
@@ -18,13 +23,19 @@ interface AnalysisSpecInput {
 export function parseAnalysisSpec(input: AnalysisSpecInput = {}): AnalysisSpec {
   const instruction = normalizeInstruction(input.instruction);
   const outputSchema = normalizeOutputSchema(input.outputSchema);
+  const artifactFormats = normalizeArtifactFormats(input.artifactFormats);
   return {
     ...(instruction ? { instruction } : {}),
-    ...(outputSchema !== undefined ? { outputSchema } : {})
+    ...(outputSchema !== undefined ? { outputSchema } : {}),
+    ...(artifactFormats.length ? { artifactFormats } : {})
   };
 }
 
 export function hasCustomAnalysis(spec: AnalysisSpec): boolean {
+  return Boolean(spec.instruction || spec.outputSchema !== undefined || spec.artifactFormats?.length);
+}
+
+export function hasExtractionRequest(spec: AnalysisSpec): boolean {
   return Boolean(spec.instruction || spec.outputSchema !== undefined);
 }
 
@@ -76,6 +87,37 @@ function normalizeOutputSchema(value: unknown): unknown {
     throw badRequest(`期望 JSON 结构最多 ${MAX_OUTPUT_SCHEMA_CHARS} 个字符。`);
   }
   return assertContainer(value);
+}
+
+function normalizeArtifactFormats(value: unknown): ArtifactFormat[] {
+  if (value == null || value === "") return [];
+  let candidates: unknown[];
+  if (Array.isArray(value)) {
+    candidates = value;
+  } else if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) return [];
+    if (raw.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (!Array.isArray(parsed)) throw new Error("not an array");
+        candidates = parsed;
+      } catch {
+        throw badRequest("输出文件格式不是有效列表。");
+      }
+    } else {
+      candidates = raw.split(",");
+    }
+  } else {
+    throw badRequest("输出文件格式必须是列表。");
+  }
+  const seen = new Set<ArtifactFormat>();
+  for (const candidate of candidates) {
+    const format = String(candidate).trim().toLowerCase() as ArtifactFormat;
+    if (!ARTIFACT_FORMATS.includes(format)) throw badRequest(`不支持的输出文件格式：${format || String(candidate)}`);
+    seen.add(format);
+  }
+  return [...seen];
 }
 
 function assertContainer(value: unknown): unknown {

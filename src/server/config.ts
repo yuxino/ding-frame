@@ -147,6 +147,8 @@ export const config = {
   visionMaxFrames: requestedVisionProvider === "groq" ? Math.min(integerEnv("VISION_MAX_FRAMES", 5), 5) : integerEnv("VISION_MAX_FRAMES", 10),
   visionTranscriptChars: integerEnv("VISION_TRANSCRIPT_CHARS", 30000),
   visionMaxTokens: integerEnv("VISION_MAX_TOKENS", 2000),
+  // File artifacts need more room than the summary JSON; only used when formats are explicitly requested.
+  artifactMaxTokens: integerEnv("ARTIFACT_MAX_TOKENS", 6000),
   maxConcurrentJobs: integerEnv("MAX_CONCURRENT_JOBS", 2),
   resultTtlSeconds: integerEnv("RESULT_TTL_SECONDS", 20 * 60),
   tempRoot: process.env.TEMP_ROOT || os.tmpdir(),

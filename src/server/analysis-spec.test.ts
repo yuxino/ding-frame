@@ -5,11 +5,13 @@ describe("parseAnalysisSpec", () => {
   it("normalizes an instruction and JSON string shape", () => {
     const spec = parseAnalysisSpec({
       instruction: "  提取商品和价格  ",
-      outputSchema: '{"products":[{"name":"string","price":0}]}'
+      outputSchema: '{"products":[{"name":"string","price":0}]}',
+      artifactFormats: '["json","csv","json"]'
     });
     expect(spec).toEqual({
       instruction: "提取商品和价格",
-      outputSchema: { products: [{ name: "string", price: 0 }] }
+      outputSchema: { products: [{ name: "string", price: 0 }] },
+      artifactFormats: ["json", "csv"]
     });
     expect(hasCustomAnalysis(spec)).toBe(true);
   });
@@ -39,6 +41,11 @@ describe("parseAnalysisSpec", () => {
     let shape: unknown = {};
     for (let index = 0; index < 34; index += 1) shape = { nested: shape };
     expect(() => parseAnalysisSpec({ outputSchema: shape })).toThrow("过于复杂");
+  });
+
+  it("accepts comma-separated artifact formats and rejects unsupported formats", () => {
+    expect(parseAnalysisSpec({ artifactFormats: "json,srt,markdown" }).artifactFormats).toEqual(["json", "srt", "markdown"]);
+    expect(() => parseAnalysisSpec({ artifactFormats: ["pdf"] })).toThrow("不支持的输出文件格式");
   });
 });
 

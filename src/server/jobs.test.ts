@@ -34,6 +34,28 @@ describe("job lifecycle cleanup", () => {
     await expireJob(job.id);
   });
 
+  it("serializes artifact metadata without embedding file content", async () => {
+    const { createJob, expireJob, serializeJob, updateJob } = await loadJobs();
+    const job = await createJob({ source: "upload", title: "a.mp4" });
+    updateJob(job, {
+      status: "done",
+      result: {
+        title: "report",
+        durationMs: 1000,
+        summary: "summary",
+        tags: [],
+        chapters: [],
+        transcript: [],
+        frames: [],
+        artifacts: [{ id: "0", name: "report.md", format: "markdown", mimeType: "text/markdown; charset=utf-8", content: "# report", sizeBytes: 8 }]
+      }
+    });
+    const serialized = serializeJob(job) as { result?: { artifacts?: Array<Record<string, unknown>> } };
+    expect(serialized.result?.artifacts?.[0]).toMatchObject({ name: "report.md", downloadUrl: `/api/jobs/${job.id}/artifacts/0` });
+    expect(serialized.result?.artifacts?.[0]).not.toHaveProperty("content");
+    await expireJob(job.id);
+  });
+
   it("purgeJob removes the job directory from disk", async () => {
     const { createJob, getJob, purgeJob } = await loadJobs();
     const job = await createJob({ source: "upload", title: "a.mp4" });

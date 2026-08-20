@@ -9,7 +9,7 @@ import { config } from "./config.js";
 import { downloadUrl } from "./download.js";
 import { analyzeMedia } from "./pipeline.js";
 import { resolveVideoUrl } from "./resolver.js";
-import { parseAnalysisSpec } from "./analysis-spec.js";
+import { parseAnalysisSpec, type ArtifactFormat } from "./analysis-spec.js";
 
 const HELP = `Koma CLI
 
@@ -22,6 +22,8 @@ Options:
   --lang <en|zh>       Language for AI-generated copy (title, summary, tags); default zh
   --instruction <text> Custom extraction requirement
   --schema <path>      JSON example or JSON Schema file for extractedData
+  --artifact <format>  Generate a file: json, csv, markdown, srt, or text (repeatable)
+  --artifacts-dir <p>  Save generated files in this directory
   --extraction-only    Output only the requested JSON instead of the full Koma result
   -h, --help           Show help
 `;
@@ -34,17 +36,19 @@ interface CliOptions {
   instruction: string | null;
   schemaPath: string | null;
   extractionOnly: boolean;
+  artifactFormats: ArtifactFormat[];
+  artifactsDir: string | null;
 }
 
 async function main(): Promise<void> {
-  const { input, jsonPath, framesDir, language, instruction, schemaPath, extractionOnly } = parseArgs(process.argv.slice(2));
+  const { input, jsonPath, framesDir, language, instruction, schemaPath, extractionOnly, artifactFormats, artifactsDir } = parseArgs(process.argv.slice(2));
   const tempDir = await mkdtemp(join(config.tempRoot, "koma-cli-"));
   let inputPath: string;
   try {
     inputPath = await prepareInput(input, tempDir);
     const title = basename(inputPath);
     const outputSchema = schemaPath ? await readFile(resolve(schemaPath), "utf8") : undefined;
-    const analysisSpec = parseAnalysisSpec({ instruction, outputSchema });
+    const analysisSpec = parseAnalysisSpec({ instruction, outputSchema, artifactFormats });
     if (extractionOnly && !analysisSpec.instruction && analysisSpec.outputSchema === undefined) {
       throw new Error("--extraction-only requires --instruction or --schema.");
     }
@@ -70,6 +74,13 @@ async function main(): Promise<void> {
         frame.path = targetPath;
       }
       console.error(`[koma] Key frames saved to ${target}`);
+    }
+
+    if (artifactsDir && result.artifacts?.length) {
+      const target = resolve(artifactsDir);
+      await mkdir(target, { recursive: true });
+      for (const artifact of result.artifacts) await writeFile(join(target, artifact.name), artifact.content, "utf8");
+      console.error(`[koma] ${result.artifacts.length} generated file(s) saved to ${target}`);
     }
 
     const payload = JSON.stringify(extractionOnly ? result.extractedData : result, null, 2) + "\n";
@@ -106,7 +117,7 @@ async function prepareInput(input: string, tempDir: string): Promise<string> {
 }
 
 function parseArgs(args: string[]): CliOptions {
-  const options: CliOptions = { input: "", jsonPath: null, framesDir: null, language: "zh", instruction: null, schemaPath: null, extractionOnly: false };
+  const options: CliOptions = { input: "", jsonPath: null, framesDir: null, language: "zh", instruction: null, schemaPath: null, extractionOnly: false, artifactFormats: [], artifactsDir: null };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--help" || arg === "-h") {
@@ -130,6 +141,14 @@ function parseArgs(args: string[]): CliOptions {
       if (!options.schemaPath) throw new Error("--schema requires a JSON file path.");
     } else if (arg === "--extraction-only") {
       options.extractionOnly = true;
+    } else if (arg === "--artifact") {
+      const format = args[++index];
+      const parsed = parseAnalysisSpec({ artifactFormats: format }).artifactFormats;
+      if (!parsed?.[0]) throw new Error("--artifact requires json, csv, markdown, srt, or text.");
+      if (!options.artifactFormats.includes(parsed[0])) options.artifactFormats.push(parsed[0]);
+    } else if (arg === "--artifacts-dir") {
+      options.artifactsDir = args[++index];
+      if (!options.artifactsDir) throw new Error("--artifacts-dir requires a directory path.");
     } else if (arg.startsWith("-")) {
       throw new Error(`Unknown option: ${arg}`);
     } else if (!options.input) {

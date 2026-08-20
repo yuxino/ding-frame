@@ -126,6 +126,7 @@ VISION_MODEL=vision-model
 | `VISION_MAX_FRAMES` | `10` | 发给视觉模型的代表帧数；Groq 自动限制为最多 5 张 |
 | `VISION_TRANSCRIPT_CHARS` | `30000` | 发给视觉模型的字幕字符上限 |
 | `VISION_MAX_TOKENS` | `2000` | 视觉模型输出上限 |
+| `ARTIFACT_MAX_TOKENS` | `6000` | 显式请求文件产物时的模型输出上限；普通总结仍使用上面的较小值 |
 | `MAX_CONCURRENT_JOBS` | `2` | 同时分析的任务数 |
 | `RESULT_TTL_SECONDS` | `1200` | 结果保留时间 |
 | `DEMO_REQUESTS_PER_IP_PER_DAY` | `0` | 单机按 IP 的每日提交上限；0 为关闭 |

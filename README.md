@@ -13,12 +13,13 @@ Upload a video or paste a URL. Koma extracts key frames, transcribes speech, and
 
 - **Video input** — upload local videos or analyze public URLs (Douyin, Bilibili, YouTube, and more via yt-dlp).
 - **Chapter summary** — the AI splits the video into timed chapters, each with a title and a few sentences explaining what happens there. Click any chapter to jump straight to it.
-- **Key frames** — scene-change detection picks the frames that matter, with uniform sampling to cover the whole video; click a thumbnail to preview the full frame.
+- **Key-frame gallery** — scene-change detection picks the frames that matter, with uniform sampling to cover the whole video; larger cards show timestamps and open into a navigable full-size preview.
 - **Subtitles** — timestamped transcription with optional speaker diarization (falls back gracefully if it fails).
 - **Tags** — AI-generated content tags with timestamps that jump to the first appearance.
 - **Timeline navigation** — jump from any chapter, tag, subtitle, or frame straight to that moment in the video.
 - **Language-aware output** — titles, summaries, chapters, tags, and captions follow the UI language (English or Chinese).
 - **Custom extraction** — provide a natural-language requirement and optional JSON example or JSON Schema; copy/download the result or retrieve the raw JSON through the API.
+- **File artifacts** — generate ready-to-download JSON, CSV, Markdown, SRT, or TXT files from the same request; language and contents follow the analysis instruction.
 - **Multiple AI backends** — presets for DashScope, OpenAI, Gemini, OpenRouter, and Groq, plus any OpenAI-compatible vision or transcription endpoint.
 - **Smart downloads** — share links are resolved before downloading; overlong videos are rejected up front instead of after the whole file arrives.
 - **Temporary processing** — video and analysis data are cleaned up automatically after the TTL.
@@ -50,6 +51,8 @@ Extract requested data and emit only the target JSON:
 node dist-server/cli.js demo.mp4 \
   --instruction "Extract every product, price, and first appearance time" \
   --schema product-shape.json \
+  --artifact csv \
+  --artifacts-dir outputs \
   --extraction-only
 ```
 

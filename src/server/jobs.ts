@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import type { TranscriptLine } from "./types.js";
 import type { AnalysisSpec } from "./analysis-spec.js";
+import type { Artifact } from "./artifacts.js";
 export type { TranscriptLine };
 
 export interface Frame {
@@ -39,6 +40,8 @@ export interface AnalysisResult {
   frames: Frame[];
   /** 用户按分析要求提取出的任意 JSON；默认通用总结任务不返回。 */
   extractedData?: unknown;
+  /** Optional downloadable text files generated from the analysis request. */
+  artifacts?: Artifact[];
 }
 
 export interface JobProgress {
@@ -114,6 +117,10 @@ export function serializeJob(job: Job | undefined) {
   const result = job.result && {
     ...job.result,
     videoUrl: `/api/jobs/${job.id}/video`,
+    artifacts: job.result.artifacts?.map(({ content: _content, ...artifact }) => ({
+      ...artifact,
+      downloadUrl: `/api/jobs/${job.id}/artifacts/${artifact.id}`
+    })),
     frames: job.result.frames.map((frame) => ({
       ...frame,
       url: `/api/jobs/${job.id}/frames/${encodeURIComponent(frame.filename)}`
