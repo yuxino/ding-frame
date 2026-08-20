@@ -24,9 +24,10 @@ import {
   isAdminSession,
   revokeAdminSession
 } from "./admin-auth.js";
-import { databaseDriver, initializeDatabase, listJobHistory, markInterruptedJobs } from "./database.js";
+import { databaseDriver, initializeDatabase, listJobHistory, listOwnedJobHistory, markInterruptedJobs, type JobHistoryRecord } from "./database.js";
 import { getRuntimeProviders, getSafeProviderSettings, initializeProviderSettings, resetProviderSettings, updateProviderSettings } from "./provider-runtime.js";
 import { initializeStorage, storageHealth, storedObjectInfo } from "./storage.js";
+import { readViewerOwnerId, resolveViewerIdentity, viewerSessionCookie } from "./viewer-session.js";
 
 await initializeDatabase();
 await markInterruptedJobs();
@@ -49,7 +50,7 @@ app.get("/api/health", async () => {
     analysisProvider: providers.vision.provider,
     models: { asr: providers.asr.model || null, vision: providers.vision.model || null },
     limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds },
-    features: { customExtraction: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled() },
+    features: { customExtraction: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, viewerHistory: true, viewerOwnedDeletion: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled() },
     configured: { asr: asrConfigured, vision: visionConfigured, analysis: visionConfigured },
     database: { driver: databaseDriver() },
     storage: storageHealth(),
@@ -121,6 +122,22 @@ app.delete("/api/admin/jobs/:id", async (request: FastifyRequest<{ Params: { id:
   return reply.code(204).send();
 });
 
+app.get("/api/my/jobs", async (request, reply) => {
+  const ownerId = ensureViewerIdentity(request, reply);
+  const jobs = (await listOwnedJobHistory(ownerId, 100)).map(publicHistoryRecord);
+  return reply.header("cache-control", "no-store").send({ jobs });
+});
+
+app.delete("/api/my/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+  if (!viewerMutationHeader(request)) return reply.code(403).send({ error: "用户请求校验失败。" });
+  const ownerId = readViewerOwnerId(request.headers.cookie);
+  if (!ownerId) return reply.code(404).send({ error: "找不到这次分析。" });
+  const job = await loadJob(request.params.id);
+  if (!job || job.ownerId !== ownerId) return reply.code(404).send({ error: "找不到这次分析。" });
+  await deleteJob(job.id);
+  return reply.code(204).send();
+});
+
 app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
   try {
@@ -134,7 +151,8 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
     });
     if (!acceptDemoRequest(request, reply)) return;
     const language = requestLanguage((request.query as { lang?: string } | undefined)?.lang);
-    job = await createJob({ source: "upload", title: part.filename, language, analysisSpec });
+    const ownerId = ensureViewerIdentity(request, reply);
+    job = await createJob({ source: "upload", title: part.filename, language, analysisSpec, ownerId });
     const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
     job.inputPath = inputPath;
     job.inputMimeType = part.mimetype;
@@ -157,7 +175,8 @@ app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply
     validateVideoUrl(url);
     const analysisSpec = parseAnalysisSpec({ instruction: body?.instruction, outputSchema: body?.outputSchema, artifactFormats: body?.artifactFormats });
     if (!acceptDemoRequest(request, reply)) return;
-    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang), analysisSpec });
+    const ownerId = ensureViewerIdentity(request, reply);
+    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang), analysisSpec, ownerId });
     job.sourceUrl = url;
     updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
     enqueueAnalysis(job);
@@ -171,7 +190,8 @@ app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply
 app.get("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
   const job = await loadJob(request.params.id);
   if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
-  return reply.header("cache-control", "no-store").send(serializeJob(job));
+  const ownerId = readViewerOwnerId(request.headers.cookie);
+  return reply.header("cache-control", "no-store").send({ ...serializeJob(job), owned: Boolean(ownerId && job.ownerId === ownerId) });
 });
 
 // Programmatic callers can fetch exactly the requested JSON value without Koma's summary wrapper.
@@ -195,7 +215,7 @@ app.get("/api/jobs/:id/artifacts/:artifactId", async (request: FastifyRequest<{ 
 });
 
 app.delete("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  return reply.code(405).header("allow", "GET").send({ error: "公开回看链接不能删除任务，请在管理后台执行永久删除。" });
+  return reply.code(405).header("allow", "GET").send({ error: "公开回看链接不能直接删除任务，请从“我的任务”删除自己提交的内容。" });
 });
 
 app.get("/api/jobs/:id/frames/:filename", async (request: FastifyRequest<{ Params: { id: string; filename: string } }>, reply: FastifyReply) => {
@@ -286,6 +306,36 @@ function requireAdminMutation(request: FastifyRequest, reply: FastifyReply): boo
 
 function adminMutationHeader(request: FastifyRequest): boolean {
   return request.headers["x-koma-admin"] === "1";
+}
+
+function viewerMutationHeader(request: FastifyRequest): boolean {
+  return request.headers["x-koma-user"] === "1";
+}
+
+function ensureViewerIdentity(request: FastifyRequest, reply: FastifyReply): string {
+  const identity = resolveViewerIdentity(request.headers.cookie);
+  if (identity.created) reply.header("set-cookie", viewerSessionCookie(identity.token, isSecureRequest(request)));
+  return identity.ownerId;
+}
+
+function isSecureRequest(request: FastifyRequest): boolean {
+  const forwardedProtocol = String(request.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim().toLowerCase();
+  return request.protocol === "https" || forwardedProtocol === "https" || config.publicBaseUrl.startsWith("https://");
+}
+
+function publicHistoryRecord(job: JobHistoryRecord) {
+  return {
+    id: job.id,
+    source: job.source,
+    title: job.title,
+    status: job.status,
+    progress: { stage: job.stage, percent: job.percent, detail: job.detail },
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    completedAt: job.completedAt,
+    mediaAvailable: job.mediaAvailable,
+    error: job.error
+  };
 }
 
 function validateVideoUrl(value: string): void {

@@ -24,6 +24,16 @@ const copy = {
     } as Record<string, string>,
     help: "How it works",
     admin: "Manage",
+    history: "My jobs",
+    historyTitle: "My analysis history",
+    historyText: "Jobs submitted from this browser. Open a result or permanently delete its video and files.",
+    historyEmpty: "No analyses have been submitted from this browser yet.",
+    historyLoading: "Loading your jobs…",
+    openResult: "Open",
+    deleteOwn: "Delete",
+    deleting: "Deleting…",
+    confirmDeleteOwn: "Permanently delete this analysis, its video, key frames, and generated files? This cannot be undone.",
+    deleteFailed: "Could not delete this analysis.",
     badge: "AI VIDEO UNDERSTANDING",
     hero: "Understand a video from the moments that matter.",
     intro: "Drop in a video. Koma builds a jumpable timeline, or follows your own request to extract structured data and downloadable files.",
@@ -121,10 +131,10 @@ const copy = {
     subtitlePanelText: "One line at a time. Click any subtitle to jump back to it.",
     playFrom: "Play from",
     noSpeech: "No usable speech was detected in this video.",
-    remaining: "Permanent replay link · deletion is managed by the administrator",
+    remaining: "Permanent replay · manage your own jobs from this browser",
     close: "Close",
     aboutTitle: "AI video understanding, without the clutter.",
-    aboutText: "Koma deletes intermediate audio after analysis, then keeps the source video, key frames, result, and generated files for replay. Anyone with the unguessable result link can view it; only the administrator can permanently delete it.",
+    aboutText: "Koma deletes intermediate audio after analysis, then keeps the source video, key frames, result, and generated files for replay. This browser can list and delete its own jobs; anyone else with the unguessable result link can only view it.",
     aboutMuted: "Configure any supported ASR and vision providers for real analysis. Without model keys, Koma runs the default summary flow with demo data; custom extraction needs a real vision model.",
     gotIt: "Got it",
     language: "中文"
@@ -146,6 +156,16 @@ const copy = {
     } as Record<string, string>,
     help: "使用说明",
     admin: "管理",
+    history: "我的任务",
+    historyTitle: "我的分析记录",
+    historyText: "显示这个浏览器提交的任务，可以回看结果，也可以永久删除视频和相关文件。",
+    historyEmpty: "这个浏览器还没有提交过分析任务。",
+    historyLoading: "正在读取任务记录…",
+    openResult: "打开",
+    deleteOwn: "删除",
+    deleting: "正在删除…",
+    confirmDeleteOwn: "确定永久删除这次分析、原视频、关键帧和生成文件吗？删除后无法恢复。",
+    deleteFailed: "没有成功删除这次分析。",
     badge: "AI 视频理解",
     hero: "从关键瞬间，看懂一段视频。",
     intro: "放入一段视频。Koma 可以整理可跳转的时间线，也可以按你的要求提取结构化数据并生成可下载文件。",
@@ -243,10 +263,10 @@ const copy = {
     subtitlePanelText: "每句一行，点击直接跳回对应位置。",
     playFrom: "从",
     noSpeech: "这段视频没有识别到可用人声。",
-    remaining: "永久回看链接 · 仅管理员可以删除",
+    remaining: "永久回看 · 可在这个浏览器管理自己的任务",
     close: "关闭",
     aboutTitle: "AI 视频理解工作台",
-    aboutText: "中间音频会在分析后立即删除；原视频、关键帧、结果和生成文件会持久保存。拿到不可猜结果链接的人可以回看，只有管理员能执行永久删除。",
+    aboutText: "中间音频会在分析后立即删除；原视频、关键帧、结果和生成文件会持久保存。这个浏览器可以查看和删除自己提交的任务；其他拿到不可猜结果链接的人只能回看。",
     aboutMuted: "配置任意受支持的听写与视觉模型后即可使用真实分析；没有模型 Key 时可演示默认总结流程，自定义提取需要真实视觉模型。",
     gotIt: "知道了",
     language: "EN"
@@ -261,7 +281,8 @@ interface Tag { label: string; category: string; atMs: number; }
 type ArtifactFormat = "json" | "csv" | "markdown" | "srt" | "text";
 interface Artifact { id: string; name: string; format: ArtifactFormat; mimeType: string; language?: string; sizeBytes: number; downloadUrl: string; }
 interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; extractedData?: unknown; artifacts?: Artifact[]; }
-interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; updatedAt: number; completedAt?: number | null; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; }
+interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; updatedAt: number; completedAt?: number | null; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; owned?: boolean; }
+interface JobHistoryItem { id: string; source: "upload" | "url"; title: string; status: Job["status"]; progress: JobProgress; createdAt: number; updatedAt: number; completedAt?: number | null; mediaAvailable: boolean; error: string | null; }
 interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number }; }
 
 function parseOutputSchema(value: string, errorMessage: string): unknown {
@@ -312,6 +333,7 @@ function App() {
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [showCustomExtraction, setShowCustomExtraction] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [outputSchema, setOutputSchema] = useState("");
@@ -324,7 +346,7 @@ function App() {
   const maxMinutes = Math.max(1, Math.round((serviceInfo?.limits?.maxDurationSeconds || 15 * 60) / 60));
   const maxMegabytes = Math.max(1, Math.round((serviceInfo?.limits?.maxUploadBytes || 500 * 1024 * 1024) / 1024 / 1024));
   const fileHint = language === "zh" ? `MP4、MOV、WebM · 最长 ${maxMinutes} 分钟 / ${maxMegabytes} MB` : `MP4, MOV, WebM · up to ${maxMinutes} min / ${maxMegabytes} MB`;
-  const privacy = language === "zh" ? "永久回看 · 管理员可删除" : "Permanent replay · Admin deletion";
+  const privacy = language === "zh" ? "永久回看 · 管理自己的任务" : "Permanent replay · Manage your jobs";
 
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
@@ -428,6 +450,31 @@ function App() {
     await startAnalysis();
   }
 
+  async function openHistoryJob(id: string) {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/jobs/${id}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(response.status === 404 ? t.jobMissing : t.startFailed);
+      setJob(await response.json() as Job);
+      setShowHistory(false);
+      window.history.pushState({}, "", `/jobs/${id}`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (cause) {
+      setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language));
+    } finally { setBusy(false); }
+  }
+
+  async function deleteOwnedJob(id: string): Promise<boolean> {
+    if (!window.confirm(t.confirmDeleteOwn)) return false;
+    const response = await fetch(`/api/my/jobs/${id}`, { method: "DELETE", headers: { "x-koma-user": "1" } });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error || t.deleteFailed);
+    }
+    if (job?.id === id) leaveJob();
+    return true;
+  }
+
   function leaveJob() { setJob(null); setFile(null); setUrl(""); setError(""); window.history.pushState({}, "", "/"); window.scrollTo({ top: 0, behavior: "smooth" }); }
   function restartAnalysis() { leaveJob(); }
   // 回到 landing 后把焦点放到 URL 输入框（结果页点“重新开始”时），
@@ -448,6 +495,7 @@ function App() {
     <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
       <span className="privacy-pill"><i />{privacy}</span>
       <button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
+      <button className="header-button" type="button" onClick={() => setShowHistory(true)}><Glyph name="clock" size={16} />{t.history}</button>
       <a className="header-button" href="/admin"><Glyph name="settings" size={16} />{t.admin}</a>
       <button className="header-button" type="button" onClick={() => setShowSettings(true)}><Glyph name="info" size={16} />{t.help}</button>
     </div></div></header>
@@ -489,8 +537,9 @@ function App() {
         </form>
       </section>}
       {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} language={language} />}
-      {hasResult && <ResultView job={job} onRestart={restartAnalysis} language={language} />}
+      {hasResult && <ResultView job={job} onRestart={restartAnalysis} onDelete={deleteOwnedJob} language={language} />}
     </main>
+    {showHistory && <HistoryModal onClose={() => setShowHistory(false)} onOpen={openHistoryJob} onDelete={deleteOwnedJob} language={language} />}
     {showSettings && <InfoModal onClose={() => setShowSettings(false)} language={language} />}
   </div>;
 }
@@ -509,9 +558,9 @@ function FitTitle({ children }: { children: ReactNode }) {
   return <h1 ref={ref}>{children}</h1>;
 }
 
-function ResultView({ job, onRestart, language }: { job: Job; onRestart: () => void; language: Language }) {
+function ResultView({ job, onRestart, onDelete, language }: { job: Job; onRestart: () => void; onDelete: (id: string) => Promise<boolean>; language: Language }) {
   const t = copy[language]; const result = job.result as AnalysisResult;
-  const [selectedFrame, setSelectedFrame] = useState(0); const [currentMs, setCurrentMs] = useState(0); const [showSubtitles, setShowSubtitles] = useState(false); const [linkCopied, setLinkCopied] = useState(false); const videoRef = useRef<HTMLVideoElement>(null);
+  const [selectedFrame, setSelectedFrame] = useState(0); const [currentMs, setCurrentMs] = useState(0); const [showSubtitles, setShowSubtitles] = useState(false); const [linkCopied, setLinkCopied] = useState(false); const [deleting, setDeleting] = useState(false); const videoRef = useRef<HTMLVideoElement>(null);
   // 结果页让浏览器标签页显示视频标题
   useEffect(() => {
     const previous = document.title;
@@ -523,11 +572,17 @@ function ResultView({ job, onRestart, language }: { job: Job; onRestart: () => v
   useEffect(() => { setShowSubtitles(!result.hasSubtitles); }, [result.hasSubtitles]);
   const activeSubtitle = showSubtitles ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs) : null;
   async function copyReplayLink() { await navigator.clipboard.writeText(window.location.href); setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1600); }
+  async function deleteResult() {
+    setDeleting(true);
+    try { await onDelete(job.id); }
+    catch (cause) { window.alert(translateServerError(cause instanceof Error ? cause.message : String(cause), language)); }
+    finally { setDeleting(false); }
+  }
   function syncToTime(atMs: number, shouldPlay = true) { const targetMs = Math.min(result.durationMs || atMs, Math.max(0, Number(atMs) || 0)); const video = videoRef.current; const seek = () => { const element = videoRef.current; if (!element) return; element.currentTime = targetMs / 1000; if (shouldPlay) element.play().catch(() => undefined); }; if (video) { if (video.readyState >= 1) seek(); else video.addEventListener("loadedmetadata", seek, { once: true }); } setCurrentMs(targetMs); setSelectedFrame(frameIndexAtTime(result.frames, targetMs)); }
   function followPlayback() { const nextMs = Math.round((videoRef.current?.currentTime || 0) * 1000); setCurrentMs(nextMs); setSelectedFrame(frameIndexAtTime(result.frames, nextMs)); }
 
   return <section className="result-layout"><div className="result-main">
-    <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={() => void copyReplayLink()}><Glyph name="link" size={16} />{linkCopied ? t.linkCopied : t.clear}</button></div></div>
+    <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={() => void copyReplayLink()}><Glyph name="link" size={16} />{linkCopied ? t.linkCopied : t.clear}</button>{job.owned && <button className="result-delete-button" type="button" disabled={deleting} onClick={() => void deleteResult()}><Glyph name="trash" size={16} />{deleting ? t.deleting : t.deleteOwn}</button>}</div></div>
     <div className="summary-block"><span><Glyph name="spark" size={15} />{t.aiSummary}</span><p>{result.summary}</p></div>
     {Object.prototype.hasOwnProperty.call(result, "extractedData") && <StructuredData data={result.extractedData} jobId={job.id} language={language} />}
     {result.artifacts?.length ? <ArtifactPanel artifacts={result.artifacts} language={language} /> : null}
@@ -603,6 +658,61 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function HistoryModal({ onClose, onOpen, onDelete, language }: { onClose: () => void; onOpen: (id: string) => Promise<void>; onDelete: (id: string) => Promise<boolean>; language: Language }) {
+  const t = copy[language];
+  const [jobs, setJobs] = useState<JobHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    const controller = new AbortController();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
+    window.addEventListener("keydown", onKeyDown);
+    fetch("/api/my/jobs", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({})) as { jobs?: JobHistoryItem[]; error?: string };
+        if (!response.ok) throw new Error(body.error || t.startFailed);
+        setJobs(Array.isArray(body.jobs) ? body.jobs : []);
+      })
+      .catch((cause) => { if (!controller.signal.aborted) setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language)); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { controller.abort(); window.removeEventListener("keydown", onKeyDown); };
+  }, [language, t.startFailed]);
+
+  async function removeJob(id: string) {
+    setDeletingId(id); setError("");
+    try {
+      if (await onDelete(id)) setJobs((current) => current.filter((job) => job.id !== id));
+    } catch (cause) {
+      setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language));
+    } finally { setDeletingId(null); }
+  }
+
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" onClick={(event) => event.stopPropagation()}>
+    <button ref={closeRef} className="modal-close" type="button" onClick={onClose} aria-label={t.close}>×</button>
+    <div className="history-modal-head"><span className="page-label">KOMA HISTORY</span><h2 id="history-title">{t.historyTitle}</h2><p>{t.historyText}</p></div>
+    <div className="history-list">
+      {loading && <div className="history-empty">{t.historyLoading}</div>}
+      {!loading && !jobs.length && !error && <div className="history-empty"><Glyph name="clock" size={22} /><span>{t.historyEmpty}</span></div>}
+      {jobs.map((item) => <article className="history-item" key={item.id}>
+        <button className="history-item-main" type="button" onClick={() => void onOpen(item.id)}>
+          <span className={`history-status ${item.status}`}><i />{t.stage[item.progress.stage] || item.status}</span>
+          <strong>{item.title}</strong>
+          <small>{formatDate(item.createdAt, language)} · {item.source === "upload" ? t.upload : t.videoUrl}</small>
+          {item.status !== "done" && <span className="history-progress"><i style={{ width: `${Math.min(100, Math.max(0, item.progress.percent))}%` }} /></span>}
+        </button>
+        <div className="history-item-actions"><button type="button" onClick={() => void onOpen(item.id)}>{t.openResult}<Glyph name="arrow" size={14} /></button><button className="history-delete" type="button" disabled={deletingId === item.id} onClick={() => void removeJob(item.id)}><Glyph name="trash" size={14} />{deletingId === item.id ? t.deleting : t.deleteOwn}</button></div>
+      </article>)}
+    </div>
+    {error && <p className="form-error history-error" role="alert">{error}</p>}
+  </div></div>;
 }
 
 function InfoModal({ onClose, language }: { onClose: () => void; language: Language }) {

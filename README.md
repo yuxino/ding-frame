@@ -23,8 +23,9 @@ Upload a video or paste a URL. Koma extracts key frames, transcribes speech, and
 - **Multiple AI backends** — presets for DashScope, OpenAI, Gemini, OpenRouter, and Groq, plus any OpenAI-compatible vision or transcription endpoint.
 - **Protected admin console** — manage active ASR/vision providers, encrypted API keys, persistent jobs, and stored assets at `/admin`; running jobs keep an immutable provider snapshot.
 - **Permanent replay** — every submission receives an unguessable `/jobs/<id>` link. SQLite/MySQL stores the job and complete result; local storage or Aliyun OSS stores the source video, frames, and generated files.
+- **Personal job history** — no account required. An HttpOnly anonymous browser identity lists jobs submitted from that browser and lets their owner delete them.
 - **Smart downloads** — share links are resolved before downloading; overlong videos are rejected up front instead of after the whole file arrives.
-- **Admin-only deletion** — public links are read-only; permanent deletion removes the database record and the entire job prefix from storage.
+- **Safe deletion boundary** — a shared replay link alone cannot delete a job. Owners and administrators can permanently remove the database record and the entire job prefix from storage.
 
 ## Quick start
 

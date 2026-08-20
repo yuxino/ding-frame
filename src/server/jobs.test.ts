@@ -40,6 +40,15 @@ describe("job lifecycle cleanup", () => {
     await deleteJob(job.id);
   });
 
+  it("keeps an accountless owner digest on a persisted job without serializing it", async () => {
+    const { createJob, deleteJob, serializeJob } = await loadJobs();
+    const ownerId = "c".repeat(64);
+    const job = await createJob({ source: "upload", title: "owned.mp4", ownerId });
+    expect(job.ownerId).toBe(ownerId);
+    expect(serializeJob(job)).not.toHaveProperty("ownerId");
+    await deleteJob(job.id);
+  });
+
   it("serializes artifact metadata without embedding file content", async () => {
     const { createJob, deleteJob, serializeJob, updateJob } = await loadJobs();
     const job = await createJob({ source: "upload", title: "a.mp4" });

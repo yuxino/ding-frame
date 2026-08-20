@@ -52,7 +52,7 @@ curl http://localhost:3000/api/jobs/JOB_ID
 curl http://localhost:3000/api/jobs/JOB_ID/extraction
 ```
 
-这个接口原样返回 `extractedData`。任务仍在执行时返回 `409`；没有请求自定义提取或任务已被管理员删除时返回 `404`。
+这个接口原样返回 `extractedData`。任务仍在执行时返回 `409`；没有请求自定义提取或任务已被删除时返回 `404`。
 
 ## 下载生成文件
 
@@ -70,7 +70,16 @@ curl http://localhost:3000/api/jobs/JOB_ID/extraction
 
 访问 `downloadUrl` 即可下载持久化文件；视频和关键帧也通过同一套只读任务 API 提供。当前只生成文本类产物，不接受模型返回的 base64 或二进制文件。
 
-公开任务接口只读。`DELETE /api/jobs/:id` 返回 `405`，永久删除只能通过已登录的管理 API 执行。
+## 我的任务
+
+浏览器首次提交任务或访问历史接口时会收到一年有效的 `koma_viewer` HttpOnly Cookie。Koma 只在数据库保存其哈希，并用它列出和删除该浏览器创建的任务：
+
+| 方法 | 地址 | 用途 |
+| --- | --- | --- |
+| `GET` | `/api/my/jobs` | 读取当前浏览器最近 100 个任务的轻量历史 |
+| `DELETE` | `/api/my/jobs/:id` | 永久删除当前浏览器创建的任务；同时需要 `x-koma-user: 1` 请求头 |
+
+直接访问公开链接仍是只读操作。`DELETE /api/jobs/:id` 返回 `405`，仅有任务 ID 或分享链接不能删除任务。命令行客户端如果要保留归属，需要用 Cookie Jar（例如 curl 的 `-c cookies.txt -b cookies.txt`）。
 
 ## 管理 API
 
@@ -85,6 +94,7 @@ curl http://localhost:3000/api/jobs/JOB_ID/extraction
 | `PUT` | `/api/admin/settings` | 保存 Provider、模型、Base URL 和可选的新 Key |
 | `POST` | `/api/admin/settings/reset` | 恢复服务器环境变量中的 Provider 配置 |
 | `GET` | `/api/admin/jobs` | 读取最多 200 个永久任务 |
+| `GET` | `/api/admin/jobs/:id` | 读取完整任务要求、Provider 快照和分析结果 |
 | `DELETE` | `/api/admin/jobs/:id` | 停止任务并永久删除数据库记录及整个存储目录 |
 
 设置接口永远不会返回 API Key 明文；只会返回 `keyConfigured` 和类似 `••••1234` 的 `keyHint`。

@@ -52,7 +52,7 @@ When the job is done, `result.extractedData` contains the requested data. To ret
 curl http://localhost:3000/api/jobs/JOB_ID/extraction
 ```
 
-This endpoint returns `extractedData` exactly. It returns `409` while the job is running and `404` when custom extraction was not requested or an administrator deleted the job.
+This endpoint returns `extractedData` exactly. It returns `409` while the job is running and `404` when custom extraction was not requested or the job was deleted.
 
 ## Download generated files
 
@@ -70,7 +70,16 @@ This endpoint returns `extractedData` exactly. It returns `409` while the job is
 
 Fetch `downloadUrl` to download the persisted file. Video and frame URLs use the same read-only job API. Koma currently generates text artifacts only; model-supplied base64 and binary files are not accepted.
 
-Public job endpoints are read-only. `DELETE /api/jobs/:id` returns `405`; permanent deletion is restricted to the authenticated administration API.
+## My jobs
+
+The browser receives a one-year `koma_viewer` HttpOnly cookie when it first submits a job or opens its history. Koma stores only its digest and uses it to list and delete jobs created by that browser:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/my/jobs` | Read lightweight history for the browser's latest 100 jobs |
+| `DELETE` | `/api/my/jobs/:id` | Permanently delete a job created by this browser; also requires `x-koma-user: 1` |
+
+The public replay endpoint remains read-only. `DELETE /api/jobs/:id` returns `405`, so possessing only a job ID or shared link does not grant deletion. CLI clients that need ownership should persist the cookie, for example with curl's `-c cookies.txt -b cookies.txt`.
 
 ## Administration API
 
@@ -85,6 +94,7 @@ Administration endpoints are intended for the same-origin `/admin` console. Afte
 | `PUT` | `/api/admin/settings` | Save providers, models, base URLs, and optional replacement keys |
 | `POST` | `/api/admin/settings/reset` | Restore provider settings from server environment variables |
 | `GET` | `/api/admin/jobs` | Read up to 200 persistent jobs |
+| `GET` | `/api/admin/jobs/:id` | Read the complete request, provider snapshot, and result |
 | `DELETE` | `/api/admin/jobs/:id` | Stop a job and permanently remove its database row and storage prefix |
 
 Settings responses never include plaintext API keys; they only expose `keyConfigured` and a last-four-character `keyHint` such as `••••1234`.

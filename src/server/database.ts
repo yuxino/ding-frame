@@ -117,6 +117,31 @@ export async function readJobRecord(id: string): Promise<PersistedJobRecord | nu
   return row ? normalizeJobRow(row) : null;
 }
 
+export async function writeJobOwner(jobId: string, ownerId: string, now = Date.now()): Promise<void> {
+  await initializeDatabase();
+  if (!/^[a-f0-9]{64}$/.test(ownerId)) throw new Error("任务访客身份无效。");
+  if (databaseDriver() === "mysql") {
+    await mysqlPool!.execute(`
+      INSERT INTO koma_job_owners (job_id, owner_hash, created_at) VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE owner_hash = VALUES(owner_hash)
+    `, [jobId, ownerId, now]);
+    return;
+  }
+  sqliteDatabase!.prepare(`
+    INSERT INTO koma_job_owners (job_id, owner_hash, created_at) VALUES (?, ?, ?)
+    ON CONFLICT(job_id) DO UPDATE SET owner_hash = excluded.owner_hash
+  `).run(jobId, ownerId, now);
+}
+
+export async function readJobOwner(jobId: string): Promise<string | null> {
+  await initializeDatabase();
+  const sql = "SELECT owner_hash FROM koma_job_owners WHERE job_id = ?";
+  const row = databaseDriver() === "mysql"
+    ? ((await mysqlPool!.query<Array<RowDataPacket & { owner_hash: string }>>(sql, [jobId]))[0][0])
+    : sqliteDatabase!.prepare(sql).get(jobId) as { owner_hash?: unknown } | undefined;
+  return typeof row?.owner_hash === "string" ? row.owner_hash : null;
+}
+
 export async function listJobHistory(limit = 100): Promise<JobHistoryRecord[]> {
   await initializeDatabase();
   const safeLimit = Math.min(500, Math.max(1, Math.floor(limit)));
@@ -124,16 +149,37 @@ export async function listJobHistory(limit = 100): Promise<JobHistoryRecord[]> {
   const rows = databaseDriver() === "mysql"
     ? (await mysqlPool!.query<RowDataPacket[]>(sql, [safeLimit]))[0] as Array<Record<string, unknown>>
     : sqliteDatabase!.prepare(sql).all(safeLimit) as Array<Record<string, unknown>>;
-  return rows.map((row) => {
-    const { analysisSpec: _analysisSpec, result: _result, inputObjectKey: _inputObjectKey, inputMimeType: _inputMimeType, ...history } = normalizeJobRow(row);
-    return history;
-  });
+  return rows.map(historyFromRow);
+}
+
+export async function listOwnedJobHistory(ownerId: string, limit = 100): Promise<JobHistoryRecord[]> {
+  await initializeDatabase();
+  if (!/^[a-f0-9]{64}$/.test(ownerId)) return [];
+  const safeLimit = Math.min(200, Math.max(1, Math.floor(limit)));
+  const selectedColumns = JOB_COLUMNS.map((column) => `j.${column}`).join(", ");
+  const sql = `
+    SELECT ${selectedColumns}
+    FROM koma_jobs j
+    INNER JOIN koma_job_owners o ON o.job_id = j.id
+    WHERE o.owner_hash = ?
+    ORDER BY j.created_at DESC
+    LIMIT ?
+  `;
+  const rows = databaseDriver() === "mysql"
+    ? (await mysqlPool!.query<RowDataPacket[]>(sql, [ownerId, safeLimit]))[0] as Array<Record<string, unknown>>
+    : sqliteDatabase!.prepare(sql).all(ownerId, safeLimit) as Array<Record<string, unknown>>;
+  return rows.map(historyFromRow);
 }
 
 export async function deleteJobRecord(id: string): Promise<void> {
   await initializeDatabase();
-  if (databaseDriver() === "mysql") await mysqlPool!.execute("DELETE FROM koma_jobs WHERE id = ?", [id]);
-  else sqliteDatabase!.prepare("DELETE FROM koma_jobs WHERE id = ?").run(id);
+  if (databaseDriver() === "mysql") {
+    await mysqlPool!.execute("DELETE FROM koma_job_owners WHERE job_id = ?", [id]);
+    await mysqlPool!.execute("DELETE FROM koma_jobs WHERE id = ?", [id]);
+  } else {
+    sqliteDatabase!.prepare("DELETE FROM koma_job_owners WHERE job_id = ?").run(id);
+    sqliteDatabase!.prepare("DELETE FROM koma_jobs WHERE id = ?").run(id);
+  }
 }
 
 export async function markInterruptedJobs(now = Date.now()): Promise<void> {
@@ -213,6 +259,15 @@ async function initializeSelectedDatabase(): Promise<void> {
         INDEX koma_jobs_status_idx (status)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+    await mysqlPool.query(`
+      CREATE TABLE IF NOT EXISTS koma_job_owners (
+        job_id VARCHAR(64) PRIMARY KEY,
+        owner_hash CHAR(64) NOT NULL,
+        created_at BIGINT NOT NULL,
+        INDEX koma_job_owners_owner_created_idx (owner_hash, created_at),
+        CONSTRAINT koma_job_owners_job_fk FOREIGN KEY (job_id) REFERENCES koma_jobs(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
   } else {
     const path = process.env.KOMA_DATABASE_PATH || join(process.cwd(), "data", "koma.sqlite");
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -250,8 +305,15 @@ async function initializeSelectedDatabase(): Promise<void> {
         media_available INTEGER NOT NULL DEFAULT 0,
         error TEXT
       );
+      CREATE TABLE IF NOT EXISTS koma_job_owners (
+        job_id TEXT PRIMARY KEY,
+        owner_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(job_id) REFERENCES koma_jobs(id) ON DELETE CASCADE
+      );
       CREATE INDEX IF NOT EXISTS koma_jobs_created_at_idx ON koma_jobs(created_at DESC);
       CREATE INDEX IF NOT EXISTS koma_jobs_status_idx ON koma_jobs(status);
+      CREATE INDEX IF NOT EXISTS koma_job_owners_owner_created_idx ON koma_job_owners(owner_hash, created_at DESC);
     `);
   }
 }
@@ -291,6 +353,11 @@ function normalizeJobRow(row: Record<string, unknown>): PersistedJobRecord {
     mediaAvailable: Number(row.media_available) === 1,
     error: typeof row.error === "string" ? row.error : null
   };
+}
+
+function historyFromRow(row: Record<string, unknown>): JobHistoryRecord {
+  const { analysisSpec: _analysisSpec, result: _result, inputObjectKey: _inputObjectKey, inputMimeType: _inputMimeType, ...history } = normalizeJobRow(row);
+  return history;
 }
 
 function parseJson(value: unknown, fallback: unknown): unknown {

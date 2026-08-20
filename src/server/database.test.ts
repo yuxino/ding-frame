@@ -45,6 +45,9 @@ describe("database adapter", () => {
       createdAt: 1000, updatedAt: 1000, completedAt: null, storagePrefix: "koma/jobs/job-1",
       inputObjectKey: null, inputMimeType: null, mediaAvailable: false, error: null
     });
+    const ownerId = "a".repeat(64);
+    await database.writeJobOwner("job-1", ownerId, 1000);
+    expect(await database.readJobOwner("job-1")).toBe(ownerId);
     await database.markInterruptedJobs(1200);
     expect(await database.readJobRecord("job-1")).toMatchObject({ status: "failed", stage: "failed", percent: 100 });
     await database.writeJobRecord({
@@ -57,11 +60,14 @@ describe("database adapter", () => {
     const history = await database.listJobHistory();
     expect(history[0]).toMatchObject({ id: "job-1", status: "done", percent: 100, mediaAvailable: true, asrProvider: "groq" });
     expect(JSON.stringify(history)).not.toContain("encrypted-payload");
+    expect(await database.listOwnedJobHistory(ownerId)).toMatchObject([{ id: "job-1", status: "done" }]);
+    expect(await database.listOwnedJobHistory("b".repeat(64))).toEqual([]);
 
     const replay = await database.readJobRecord("job-1");
     expect(replay).toMatchObject({ inputObjectKey: "koma/jobs/job-1/video/source.mp4", result: { summary: "done" } });
     await database.deleteJobRecord("job-1");
     expect(await database.listJobHistory()).toEqual([]);
+    expect(await database.readJobOwner("job-1")).toBeNull();
     await database.closeDatabase();
   });
 });

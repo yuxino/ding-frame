@@ -5,7 +5,7 @@ import { config, type AsrProvider, type VisionProvider } from "./config.js";
 import type { TranscriptLine } from "./types.js";
 import type { AnalysisSpec } from "./analysis-spec.js";
 import type { Artifact } from "./artifacts.js";
-import { deleteJobRecord, readJobRecord, writeJobRecord, type PersistedJobRecord } from "./database.js";
+import { deleteJobRecord, readJobOwner, readJobRecord, writeJobOwner, writeJobRecord, type PersistedJobRecord } from "./database.js";
 import { getRuntimeProviders, type RuntimeProviders } from "./provider-runtime.js";
 import { deleteStoredPrefix, jobStoragePrefix } from "./storage.js";
 export type { TranscriptLine };
@@ -73,13 +73,14 @@ export interface Job {
   language: "en" | "zh";
   analysisSpec: AnalysisSpec;
   providers: RuntimeProviders;
+  ownerId?: string;
 }
 
 const jobs = new Map<string, Job>();
 const abortControllers = new Map<string, AbortController>();
 const persistenceQueues = new Map<string, Promise<void>>();
 
-export async function createJob({ source, title, language = "zh", analysisSpec = {}, providers = getRuntimeProviders() }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec; providers?: RuntimeProviders }): Promise<Job> {
+export async function createJob({ source, title, language = "zh", analysisSpec = {}, providers = getRuntimeProviders(), ownerId }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec; providers?: RuntimeProviders; ownerId?: string }): Promise<Job> {
   const id = randomUUID();
   const dir = join(config.tempRoot, `koma-${id}`);
   await mkdir(dir, { recursive: true });
@@ -100,11 +101,21 @@ export async function createJob({ source, title, language = "zh", analysisSpec =
     mediaAvailable: false,
     language,
     analysisSpec,
-    providers
+    providers,
+    ownerId
   };
   jobs.set(id, job);
   abortControllers.set(id, new AbortController());
-  await writeJobRecord(toPersistedRecord(job));
+  try {
+    await writeJobRecord(toPersistedRecord(job));
+    if (ownerId) await writeJobOwner(id, ownerId, now);
+  } catch (error) {
+    jobs.delete(id);
+    abortControllers.delete(id);
+    await deleteJobRecord(id).catch(() => undefined);
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
   return job;
 }
 
@@ -121,7 +132,7 @@ export async function loadJob(id: string): Promise<Job | undefined> {
   if (active) return active;
   const record = await readJobRecord(id);
   if (!record) return undefined;
-  const job = fromPersistedRecord(record);
+  const job = fromPersistedRecord(record, await readJobOwner(id));
   jobs.set(id, job);
   return job;
 }
@@ -241,7 +252,7 @@ function persistentResult(result: AnalysisResult | null): AnalysisResult | null 
   };
 }
 
-function fromPersistedRecord(record: PersistedJobRecord): Job {
+function fromPersistedRecord(record: PersistedJobRecord, ownerId: string | null): Job {
   const result = record.result && typeof record.result === "object" ? record.result as AnalysisResult : null;
   return {
     id: record.id,
@@ -261,6 +272,7 @@ function fromPersistedRecord(record: PersistedJobRecord): Job {
     mediaAvailable: record.mediaAvailable,
     language: record.language,
     analysisSpec: record.analysisSpec && typeof record.analysisSpec === "object" ? record.analysisSpec as AnalysisSpec : {},
+    ownerId: ownerId || undefined,
     providers: {
       asr: { provider: record.asrProvider as AsrProvider, apiKey: "", baseUrl: "", model: record.asrModel },
       vision: { provider: record.visionProvider as VisionProvider, apiKey: "", baseUrl: "", model: record.visionModel }

@@ -163,7 +163,7 @@ The database stores encrypted provider settings and complete JSON replay records
 | `OSS_PUBLIC_BASE_URL` | empty | Optional trusted public/CDN base URL; otherwise signed URLs are used |
 | `OSS_SIGNED_URL_SECONDS` | `900` | Signed replay URL lifetime, capped at one hour |
 
-Public job links are permanent and read-only. Only `/admin` can permanently delete a task and its complete storage prefix.
+Public job links are permanent and read-only for anyone who only has the link. The submitting browser can list and delete its own jobs through an HttpOnly anonymous identity; `/admin` can manage every job. Permanent deletion removes the task and its complete storage prefix.
 
 ## Processing pipeline
 
