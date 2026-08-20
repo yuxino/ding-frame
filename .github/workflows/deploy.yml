@@ -126,6 +126,10 @@ jobs:
               find "$install_dir" -depth -delete
             fi
             export PATH="$runtime_root/bin:$PATH"
+            expected_database="${DB_DRIVER:-}"
+            expected_storage="${STORAGE_DRIVER:-}"
+            expected_admin="false"
+            if [ -n "${ADMIN_PASSWORD:-}" ]; then expected_admin="true"; fi
             cd ${{ steps.deploy-meta.outputs.deploy_target }}
             npm install --omit=dev --no-audit --no-fund --prefer-offline
             "$node_bin" scripts/write-deployment-env.mjs .env
@@ -143,3 +147,26 @@ jobs:
             pm2 delete koma 2>/dev/null || true
             pm2 start dist-server/index.js --name koma --interpreter "$node_bin"
             pm2 save
+
+            health_json=""
+            for attempt in $(seq 1 15); do
+              if health_json="$(curl -fsS http://127.0.0.1:3010/api/health 2>/dev/null)"; then
+                break
+              fi
+              sleep 2
+            done
+            "$node_bin" - "$health_json" "$expected_database" "$expected_storage" "$expected_admin" <<'NODE'
+            const [raw, expectedDatabase, expectedStorage, expectedAdmin] = process.argv.slice(2);
+            const health = JSON.parse(raw || "{}");
+            const summary = {
+              ok: health.ok === true,
+              database: health.database?.driver || null,
+              storage: health.storage?.driver || null,
+              admin: health.features?.admin === true
+            };
+            console.log(JSON.stringify(summary));
+            if (!summary.ok) process.exit(1);
+            if (expectedDatabase && summary.database !== expectedDatabase) process.exit(1);
+            if (expectedStorage && summary.storage !== expectedStorage) process.exit(1);
+            if (expectedAdmin === "true" && !summary.admin) process.exit(1);
+            NODE
