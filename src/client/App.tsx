@@ -34,15 +34,18 @@ const copy = {
     deleting: "Deleting…",
     confirmDeleteOwn: "Permanently delete this analysis, its video, key frames, and generated files? This cannot be undone.",
     deleteFailed: "Could not delete this analysis.",
-    badge: "AI VIDEO UNDERSTANDING",
-    hero: "Understand a video from the moments that matter.",
-    intro: "Drop in a video. Koma builds a jumpable timeline, or follows your own request to extract structured data and downloadable files.",
-    keyFrames: "Key frames",
-    keyFramesSub: "See what matters",
-    subtitles: "Subtitles",
-    subtitlesSub: "Find exact moments",
-    cleanup: "Replayable",
-    cleanupSub: "Return with a private link",
+    badge: "VIDEO INTELLIGENCE WORKSPACE",
+    hero: "Turn video into data you can use.",
+    intro: "Koma understands what was said and shown, then turns it into a replayable timeline, structured JSON, subtitles, reports, and ready-to-use files.",
+    flowVideo: "VIDEO",
+    flowSignals: "AUDIO + FRAMES",
+    flowOutput: "DATA + FILES",
+    homeUnderstand: "Understand",
+    homeUnderstandSub: "Summary, chapters, subtitles, and key moments",
+    homeExtract: "Extract",
+    homeExtractSub: "Structured JSON shaped to your exact request",
+    homeDeliver: "Deliver",
+    homeDeliverSub: "JSON, CSV, Markdown, SRT, and TXT outputs",
     newAnalysis: "NEW ANALYSIS",
     startOne: "Start an analysis",
     sourceLabel: "Video source",
@@ -56,6 +59,8 @@ const copy = {
     temporary: "Saved for permanent replay",
     customExtract: "Custom extraction",
     customHint: "Ask for specific data, JSON, subtitles, reports, or downloadable files",
+    presetsLabel: "ANALYSIS TEMPLATES",
+    presetsHint: "Start from a useful request, then edit every detail",
     analysisRequirement: "Analysis requirement",
     instructionPlaceholder: "Example: Extract every product mentioned, its price, and the first timestamp where it appears.",
     outputShape: "Expected JSON shape (optional)",
@@ -136,7 +141,7 @@ const copy = {
     aboutTitle: "How to use Koma",
     aboutText: "From a video to a replayable analysis and ready-to-use files.",
     aboutSteps: [
-      { title: "1 · Submit a video", text: "Upload a local video or paste a public URL. Open Custom extraction to specify the data, JSON shape, output language, and JSON, CSV, Markdown, SRT, or TXT files you need." },
+      { title: "1 · Submit a video", text: "Upload a local video or paste a public URL. Pick an analysis template or open Custom extraction to specify the data, JSON shape, output language, and files you need." },
       { title: "2 · Review the result", text: "Koma combines audio and key frames into a summary, chapters, tags, subtitles, structured data, and generated files. Click any timestamp, subtitle, chapter, tag, or key frame to return to that moment." },
       { title: "3 · Return from My jobs", text: "My jobs lists analyses submitted from this browser. You can reopen a running or completed job and permanently delete your own video, frames, result, and generated files." },
       { title: "4 · Share or administer", text: "Anyone with an unguessable replay link can view the result but cannot delete it. Administrators use Manage to configure providers and encrypted keys, inspect every job's request and result, and perform global deletion." }
@@ -172,15 +177,18 @@ const copy = {
     deleting: "正在删除…",
     confirmDeleteOwn: "确定永久删除这次分析、原视频、关键帧和生成文件吗？删除后无法恢复。",
     deleteFailed: "没有成功删除这次分析。",
-    badge: "AI 视频理解",
-    hero: "从关键瞬间，看懂一段视频。",
-    intro: "放入一段视频。Koma 可以整理可跳转的时间线，也可以按你的要求提取结构化数据并生成可下载文件。",
-    keyFrames: "关键帧",
-    keyFramesSub: "快速理解画面",
-    subtitles: "逐句字幕",
-    subtitlesSub: "准确定位内容",
-    cleanup: "永久回看",
-    cleanupSub: "凭私密链接随时返回",
+    badge: "视频理解与数据提取工作台",
+    hero: "把视频，变成可以使用的数据。",
+    intro: "Koma 同时理解视频里说了什么、出现了什么，再把内容整理成可回看的时间线、结构化 JSON、字幕、报告和可直接使用的文件。",
+    flowVideo: "视频",
+    flowSignals: "声音 + 画面",
+    flowOutput: "数据 + 文件",
+    homeUnderstand: "理解内容",
+    homeUnderstandSub: "总结、章节、字幕与关键瞬间",
+    homeExtract: "提取数据",
+    homeExtractSub: "严格按要求返回结构化 JSON",
+    homeDeliver: "生成文件",
+    homeDeliverSub: "输出 JSON、CSV、Markdown、SRT、TXT",
     newAnalysis: "NEW ANALYSIS",
     startOne: "开始一次分析",
     sourceLabel: "视频来源",
@@ -194,6 +202,8 @@ const copy = {
     temporary: "保存为可永久回看的任务",
     customExtract: "自定义提取",
     customHint: "写下分析要求，可返回 JSON、字幕、报告或可下载文件",
+    presetsLabel: "分析模板",
+    presetsHint: "从常用要求开始，所有内容都可以继续修改",
     analysisRequirement: "分析要求",
     instructionPlaceholder: "例如：提取视频中出现的所有商品、价格，以及首次出现的时间。",
     outputShape: "期望 JSON 结构（可选）",
@@ -274,7 +284,7 @@ const copy = {
     aboutTitle: "如何使用 Koma",
     aboutText: "从一段视频，得到可回看、可定位、可下载的完整分析结果。",
     aboutSteps: [
-      { title: "1 · 提交视频", text: "上传本地视频或粘贴公开视频地址。展开“自定义提取”后，可以指定要抓取的数据、JSON 结构、返回语言，以及 JSON、CSV、Markdown、SRT、TXT 文件。" },
+      { title: "1 · 提交视频", text: "上传本地视频或粘贴公开视频地址。可以直接选择分析模板，也可以展开“自定义提取”，指定要抓取的数据、JSON 结构、返回语言和文件格式。" },
       { title: "2 · 查看分析结果", text: "Koma 会结合声音和关键帧生成总结、章节、标签、字幕、结构化数据与文件。点击时间、字幕、章节、标签或关键帧，都能跳回视频对应位置。" },
       { title: "3 · 从“我的任务”回来", text: "“我的任务”会列出这个浏览器提交的分析。可以重新打开执行中或已完成的任务，也可以永久删除自己的原视频、关键帧、结果和生成文件。" },
       { title: "4 · 分享与管理", text: "拿到不可猜回看链接的人可以查看结果，但不能删除。管理员从“管理”进入后台，配置 Provider 和加密 Key，查看全部任务的要求与结果，并执行全局删除。" }
@@ -296,6 +306,40 @@ interface AnalysisResult { title: string; durationMs: number; summary: string; t
 interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; updatedAt: number; completedAt?: number | null; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; owned?: boolean; }
 interface JobHistoryItem { id: string; source: "upload" | "url"; title: string; status: Job["status"]; progress: JobProgress; createdAt: number; updatedAt: number; completedAt?: number | null; mediaAvailable: boolean; error: string | null; }
 interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number }; }
+interface AnalysisPreset { id: "extract" | "subtitles" | "report"; label: string; description: string; instruction: string; outputSchema?: unknown; formats: ArtifactFormat[]; }
+
+function analysisPresets(language: Language): AnalysisPreset[] {
+  if (language === "zh") return [
+    {
+      id: "extract", label: "结构化信息", description: "人物、商品、数字与时间点", formats: ["json", "csv"],
+      instruction: "提取视频中出现的关键人物、组织、商品、数字和重要观点，并记录每项首次出现的时间。只返回视频中有明确依据的信息。",
+      outputSchema: { items: [{ type: "string", name: "string", value: "string", evidence: "string", atMs: 0 }] }
+    },
+    {
+      id: "subtitles", label: "多语言字幕", description: "生成中英文可下载字幕", formats: ["srt"],
+      instruction: "生成两份完整 SRT 字幕：zh-CN.srt 使用简体中文，en-US.srt 使用自然英文。保留准确时间轴，不遗漏有意义的口语内容。"
+    },
+    {
+      id: "report", label: "内容报告", description: "摘要、结论、行动项与引用", formats: ["markdown"],
+      instruction: "生成一份结构清晰的中文 Markdown 报告，包含执行摘要、核心观点、关键证据及时间点、结论和可执行行动项。"
+    }
+  ];
+  return [
+    {
+      id: "extract", label: "Structured data", description: "People, products, numbers, and moments", formats: ["json", "csv"],
+      instruction: "Extract the key people, organizations, products, numbers, and claims in the video, including the first timestamp for each item. Include only information supported by the video.",
+      outputSchema: { items: [{ type: "string", name: "string", value: "string", evidence: "string", atMs: 0 }] }
+    },
+    {
+      id: "subtitles", label: "Bilingual subtitles", description: "Download Chinese and English captions", formats: ["srt"],
+      instruction: "Generate two complete SRT subtitle files: zh-CN.srt in Simplified Chinese and en-US.srt in natural English. Preserve accurate timing and all meaningful speech."
+    },
+    {
+      id: "report", label: "Content report", description: "Summary, findings, actions, and citations", formats: ["markdown"],
+      instruction: "Create a well-structured English Markdown report with an executive summary, key findings, timestamped evidence, conclusions, and actionable next steps."
+    }
+  ];
+}
 
 function parseOutputSchema(value: string, errorMessage: string): unknown {
   const raw = value.trim();
@@ -350,6 +394,7 @@ function App() {
   const [instruction, setInstruction] = useState("");
   const [outputSchema, setOutputSchema] = useState("");
   const [artifactFormats, setArtifactFormats] = useState<ArtifactFormat[]>([]);
+  const [activePreset, setActivePreset] = useState<AnalysisPreset["id"] | null>(null);
   const [serviceInfo, setServiceInfo] = useState<ServiceInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -365,6 +410,15 @@ function App() {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     document.title = language === "zh" ? "Koma — AI 视频理解" : "Koma — AI Video Understanding";
   }, [language]);
+
+  useEffect(() => {
+    if (!activePreset) return;
+    const preset = analysisPresets(language).find((item) => item.id === activePreset);
+    if (!preset) return;
+    setInstruction(preset.instruction);
+    setOutputSchema(preset.outputSchema === undefined ? "" : JSON.stringify(preset.outputSchema, null, 2));
+    setArtifactFormats([...preset.formats]);
+  }, [language, activePreset]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -500,7 +554,16 @@ function App() {
   function goHome() { leaveJob(); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
   function toggleArtifactFormat(format: ArtifactFormat) {
+    setActivePreset(null);
     setArtifactFormats((current) => current.includes(format) ? current.filter((item) => item !== format) : [...current, format]);
+  }
+  function applyPreset(preset: AnalysisPreset) {
+    setInstruction(preset.instruction);
+    setOutputSchema(preset.outputSchema === undefined ? "" : JSON.stringify(preset.outputSchema, null, 2));
+    setArtifactFormats([...preset.formats]);
+    setActivePreset(preset.id);
+    setShowCustomExtraction(true);
+    setError("");
   }
 
   return <div className="app-shell">
@@ -518,10 +581,11 @@ function App() {
           <div className="hero-badge"><span />{t.badge}</div>
           <h1>{t.hero}</h1>
           <p>{t.intro}</p>
+          <div className="hero-flow" aria-label={`${t.flowVideo}, ${t.flowSignals}, ${t.flowOutput}`}><span>{t.flowVideo}</span><i /><span>{t.flowSignals}</span><i /><strong>{t.flowOutput}</strong></div>
           <div className="feature-row">
-            <div><Glyph name="frame" /><span><strong>{t.keyFrames}</strong><small>{t.keyFramesSub}</small></span></div>
-            <div><Glyph name="voice" /><span><strong>{t.subtitles}</strong><small>{t.subtitlesSub}</small></span></div>
-            <div><Glyph name="clock" /><span><strong>{t.cleanup}</strong><small>{t.cleanupSub}</small></span></div>
+            <div><Glyph name="frame" /><span><strong>{t.homeUnderstand}</strong><small>{t.homeUnderstandSub}</small></span></div>
+            <div><Glyph name="spark" /><span><strong>{t.homeExtract}</strong><small>{t.homeExtractSub}</small></span></div>
+            <div><Glyph name="arrow" /><span><strong>{t.homeDeliver}</strong><small>{t.homeDeliverSub}</small></span></div>
           </div>
         </div>
 
@@ -535,11 +599,12 @@ function App() {
             <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
             <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : fileHint}</small>
           </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} /><small>{t.urlHint}</small></label>}
+          <div className="preset-panel"><div className="preset-panel-head"><span>{t.presetsLabel}</span><small>{t.presetsHint}</small></div><div className="preset-list">{analysisPresets(language).map((preset) => <button key={preset.id} type="button" className={activePreset === preset.id ? "selected" : ""} aria-pressed={activePreset === preset.id} onClick={() => applyPreset(preset)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><em>{preset.formats.map((format) => format === "markdown" ? "MD" : format.toUpperCase()).join(" + ")}</em></button>)}</div></div>
           <div className={`custom-extraction ${showCustomExtraction ? "open" : ""} ${instruction.trim() || outputSchema.trim() || artifactFormats.length ? "configured" : ""}`}>
             <button className="custom-extraction-toggle" type="button" aria-expanded={showCustomExtraction} onClick={() => setShowCustomExtraction((value) => !value)}><span><Glyph name="spark" size={15} /><strong>{t.customExtract}</strong><small>{t.customHint}</small></span><i>{showCustomExtraction ? "−" : "+"}</i></button>
             {showCustomExtraction && <div className="custom-extraction-fields">
-              <label><span>{t.analysisRequirement}</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} maxLength={4000} rows={3} placeholder={t.instructionPlaceholder} /></label>
-              <label><span>{t.outputShape}</span><textarea className="schema-input" value={outputSchema} onChange={(event) => setOutputSchema(event.target.value)} maxLength={12000} rows={6} spellCheck={false} placeholder={t.schemaPlaceholder} /><small>{t.schemaHint}</small></label>
+              <label><span>{t.analysisRequirement}</span><textarea value={instruction} onChange={(event) => { setInstruction(event.target.value); setActivePreset(null); }} maxLength={4000} rows={3} placeholder={t.instructionPlaceholder} /></label>
+              <label><span>{t.outputShape}</span><textarea className="schema-input" value={outputSchema} onChange={(event) => { setOutputSchema(event.target.value); setActivePreset(null); }} maxLength={12000} rows={6} spellCheck={false} placeholder={t.schemaPlaceholder} /><small>{t.schemaHint}</small></label>
               <fieldset className="artifact-format-field"><legend>{t.outputFiles}</legend><small>{t.outputFilesHint}</small><div className="artifact-format-list">{(["json", "csv", "markdown", "srt", "text"] as ArtifactFormat[]).map((format) => <button key={format} type="button" className={artifactFormats.includes(format) ? "selected" : ""} aria-pressed={artifactFormats.includes(format)} onClick={() => toggleArtifactFormat(format)}>{format === "markdown" ? "Markdown" : format.toUpperCase()}</button>)}</div></fieldset>
             </div>}
           </div>
