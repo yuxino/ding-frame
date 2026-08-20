@@ -25,6 +25,15 @@ describe("job lifecycle cleanup", () => {
     await expireJob(job.id);
   });
 
+  it("stores and serializes a custom analysis specification", async () => {
+    const { createJob, expireJob, serializeJob } = await loadJobs();
+    const analysisSpec = { instruction: "提取商品", outputSchema: { products: [] } };
+    const job = await createJob({ source: "upload", title: "a.mp4", analysisSpec });
+    expect(job.analysisSpec).toEqual(analysisSpec);
+    expect(serializeJob(job)?.analysisSpec).toEqual(analysisSpec);
+    await expireJob(job.id);
+  });
+
   it("purgeJob removes the job directory from disk", async () => {
     const { createJob, getJob, purgeJob } = await loadJobs();
     const job = await createJob({ source: "upload", title: "a.mp4" });

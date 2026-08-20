@@ -8,6 +8,7 @@ import { getJobAbortSignal, updateJob, type AnalysisResult, type Job, type JobPr
 import { resolveVideoUrl } from "./resolver.js";
 import { createSemaphore } from "./semaphore.js";
 import { extractAudioSegments, extractFrames, inspectVideo } from "./video.js";
+import type { AnalysisSpec } from "./analysis-spec.js";
 
 // 限制同时运行的分析任务数，超出部分排队等待。
 // 多个大视频同时抽帧/转写会吃满 CPU 和内存，这里把它们串成有限并发。
@@ -38,12 +39,13 @@ interface AnalyzeMediaOptions {
   audioDir: string;
   signal?: AbortSignal;
   language?: "en" | "zh";
+  analysisSpec?: AnalysisSpec;
   onProgress?: (progress: JobProgress) => void;
 }
 
 // 与 job 解耦的媒体分析管线，HTTP 任务与 headless CLI 共用。
 // 输入文件与帧目录的生命周期由调用方负责；音频切片作为中间产物在这里即时清理。
-export async function analyzeMedia({ inputPath, title, framesDir, audioDir, signal, language = "zh", onProgress = () => {} }: AnalyzeMediaOptions): Promise<AnalysisResult> {
+export async function analyzeMedia({ inputPath, title, framesDir, audioDir, signal, language = "zh", analysisSpec = {}, onProgress = () => {} }: AnalyzeMediaOptions): Promise<AnalysisResult> {
   onProgress({ stage: "inspecting", percent: 12, detail: "正在读取视频尺寸和时长。" });
   const media = await inspectVideo(inputPath, { signal });
   if (!media.hasVideo) throw new Error("这个文件里没有视频画面，请换一个带画面的视频。");
@@ -77,7 +79,7 @@ export async function analyzeMedia({ inputPath, title, framesDir, audioDir, sign
 
   throwIfAborted(signal);
   onProgress({ stage: "interpreting", percent: 82, detail: "把声音与画面放回同一条时间线。" });
-  const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir, signal, language });
+  const result = await analyze({ title, durationMs: media.durationMs, frames, transcript, framesDir, signal, language, analysisSpec });
   result.hasSubtitles = Boolean(result.hasSubtitles || media.hasNativeSubtitles);
   await rm(audioDir, { recursive: true, force: true }).catch(() => undefined);
   return result;
@@ -93,7 +95,7 @@ async function transcribeSegments(
 ): Promise<Awaited<ReturnType<typeof transcribe>>> {
   const audioSegments = await extractAudioSegments(inputPath, audioDir, durationMs, { signal });
   throwIfAborted(signal);
-  onProgress({ stage: "transcribing", percent: 65, detail: config.asrProvider === "mock" ? "演示听写正在生成。" : "Fun-ASR 正在生成逐句字幕。" });
+  onProgress({ stage: "transcribing", percent: 65, detail: config.asrProvider === "mock" ? "演示听写正在生成。" : `${config.asrModel} 正在生成逐句字幕。` });
   return audioSegments.length ? await transcribe({ audioSegments, durationMs, signal }) : [];
 }
 
@@ -131,6 +133,7 @@ async function runAnalysis(job: Job, signal?: AbortSignal): Promise<void> {
       audioDir,
       signal,
       language: job.language,
+      analysisSpec: job.analysisSpec,
       onProgress: (progress) => updateJob(job, { progress })
     });
     updateJob(job, { status: "done", result, progress: { stage: "done", percent: 100, detail: "分析已经完成。" } });

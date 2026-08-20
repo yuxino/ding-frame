@@ -65,17 +65,26 @@ jobs:
         env:
           APP_PORT: "3010"
           ASR_PROVIDER: ${{ secrets.ASR_PROVIDER }}
+          ASR_API_KEY: ${{ secrets.ASR_API_KEY }}
+          ASR_BASE_URL: ${{ secrets.ASR_BASE_URL }}
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ASR_MODEL: ${{ secrets.ASR_MODEL }}
-          ANALYSIS_PROVIDER: ${{ secrets.ANALYSIS_PROVIDER }}
+          VISION_PROVIDER: ${{ secrets.VISION_PROVIDER || secrets.ANALYSIS_PROVIDER }}
+          VISION_API_KEY: ${{ secrets.VISION_API_KEY }}
+          VISION_BASE_URL: ${{ secrets.VISION_BASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           VISION_MODEL: ${{ secrets.VISION_MODEL }}
           PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+          DEMO_REQUESTS_PER_IP_PER_DAY: ${{ secrets.DEMO_REQUESTS_PER_IP_PER_DAY }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           timeout: 30m
-          envs: APP_PORT,ASR_PROVIDER,DASHSCOPE_API_KEY,ASR_MODEL,ANALYSIS_PROVIDER,VISION_MODEL,PUBLIC_BASE_URL
+          envs: APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY
           script: |
             set -e
             cd ${{ steps.deploy-meta.outputs.deploy_target }}
@@ -83,11 +92,21 @@ jobs:
             cat > .env <<EOF
             PORT=${APP_PORT}
             ASR_PROVIDER=${ASR_PROVIDER}
+            ASR_API_KEY=${ASR_API_KEY}
+            ASR_BASE_URL=${ASR_BASE_URL}
             DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+            GROQ_API_KEY=${GROQ_API_KEY}
+            OPENAI_API_KEY=${OPENAI_API_KEY}
             ASR_MODEL=${ASR_MODEL}
-            ANALYSIS_PROVIDER=${ANALYSIS_PROVIDER}
+            VISION_PROVIDER=${VISION_PROVIDER}
+            VISION_API_KEY=${VISION_API_KEY}
+            VISION_BASE_URL=${VISION_BASE_URL}
+            GEMINI_API_KEY=${GEMINI_API_KEY}
+            OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
             VISION_MODEL=${VISION_MODEL}
             PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+            DEMO_REQUESTS_PER_IP_PER_DAY=${DEMO_REQUESTS_PER_IP_PER_DAY}
+            TRUST_PROXY=true
             EOF
             chmod 600 .env
             pm2 delete ding-frame 2>/dev/null || true

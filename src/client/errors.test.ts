@@ -10,6 +10,9 @@ describe("translateServerError", () => {
     expect(translateServerError("视频太大了，第一版最多支持 500 MB。", "en")).toBe("Video is too large. Reduce the file size or pick a shorter video.");
     expect(translateServerError("这个文件里没有视频画面，请换一个带画面的视频。", "en")).toBe("This file has no video track. Please choose a video with visuals.");
     expect(translateServerError("这次分析已经消失了。", "en")).toBe("This analysis is no longer available.");
+    expect(translateServerError("今天的公开演示次数已经用完，请明天再来。", "en")).toContain("public demo allowance");
+    expect(translateServerError("画面模型没有按要求返回结构化提取结果，请重试。", "en")).toContain("structured data");
+    expect(translateServerError("自定义结构化提取需要配置真实的视觉模型。", "en")).toContain("requires a configured vision model");
   });
 
   it("maps speaker diarization errors to English", () => {

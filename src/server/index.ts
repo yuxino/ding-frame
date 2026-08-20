@@ -13,11 +13,26 @@ import { streamToFile } from "./download.js";
 import { extractUrlFromText } from "./resolver.js";
 import { normalizeVideoUrl } from "./url-source.js";
 import { parseByteRange } from "./video-stream.js";
+import { createDailyLimiter } from "./rate-limit.js";
+import { parseAnalysisSpec } from "./analysis-spec.js";
 
-const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024 });
+const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024, trustProxy: config.trustProxy });
+const demoLimiter = createDailyLimiter(config.demoRequestsPerIpPerDay);
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
 
-app.get("/api/health", async () => ({ ok: true, service: "koma", asrProvider: config.asrProvider, analysisProvider: config.analysisProvider, configured: { asr: asrIsConfigured(), analysis: analysisIsConfigured() }, mock: { asr: config.asrProvider === "mock", analysis: config.analysisProvider === "mock" } }));
+app.get("/api/health", async () => ({
+  ok: true,
+  service: "koma",
+  providers: { asr: config.asrProvider, vision: config.visionProvider },
+  asrProvider: config.asrProvider,
+  analysisProvider: config.visionProvider,
+  models: { asr: config.asrModel || null, vision: config.visionModel || null },
+  limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds, resultTtlSeconds: config.resultTtlSeconds },
+  features: { customExtraction: true, rawExtractionEndpoint: true },
+  configured: { asr: asrIsConfigured(), vision: analysisIsConfigured(), analysis: analysisIsConfigured() },
+  demoLimitPerIpPerDay: config.demoRequestsPerIpPerDay || null,
+  mock: { asr: config.asrProvider === "mock", vision: config.visionProvider === "mock", analysis: config.visionProvider === "mock" }
+}));
 
 app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
@@ -25,8 +40,13 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
     const part = await request.file();
     if (!part) return reply.code(400).send({ error: "没有找到视频文件。" });
     if (!part.mimetype.startsWith("video/")) return reply.code(415).send({ error: "请放入视频文件。" });
+    const analysisSpec = parseAnalysisSpec({
+      instruction: multipartFieldValue(part.fields, "instruction"),
+      outputSchema: multipartFieldValue(part.fields, "outputSchema")
+    });
+    if (!acceptDemoRequest(request, reply)) return;
     const language = requestLanguage((request.query as { lang?: string } | undefined)?.lang);
-    job = await createJob({ source: "upload", title: part.filename, language });
+    job = await createJob({ source: "upload", title: part.filename, language, analysisSpec });
     const inputPath = join(job.dir, `input${extensionFor(part.filename)}`);
     job.inputPath = inputPath;
     job.inputMimeType = part.mimetype;
@@ -43,11 +63,13 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
 app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
   try {
-    const body = request.body as { url?: unknown; lang?: unknown } | undefined;
+    const body = request.body as { url?: unknown; lang?: unknown; instruction?: unknown; outputSchema?: unknown } | undefined;
     const rawUrl = body?.url;
     const url = normalizeVideoUrl(extractUrlFromText(rawUrl) || (typeof rawUrl === "string" ? rawUrl.trim() : ""));
     validateVideoUrl(url);
-    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang) });
+    const analysisSpec = parseAnalysisSpec({ instruction: body?.instruction, outputSchema: body?.outputSchema });
+    if (!acceptDemoRequest(request, reply)) return;
+    job = await createJob({ source: "url", title: new URL(url).pathname.split("/").pop() || "视频地址", language: requestLanguage(body?.lang), analysisSpec });
     job.sourceUrl = url;
     updateJob(job, { progress: { stage: "resolving", percent: 5, detail: "正在解析视频真实地址。" } });
     enqueueAnalysis(job);
@@ -62,6 +84,17 @@ app.get("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string }
   const job = getJob(request.params.id);
   if (!job) return reply.code(404).send({ error: "这次分析已经消失了。" });
   return reply.header("cache-control", "no-store").send(serializeJob(job));
+});
+
+// Programmatic callers can fetch exactly the requested JSON value without Koma's summary wrapper.
+app.get("/api/jobs/:id/extraction", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  const job = getJob(request.params.id);
+  if (!job) return reply.code(404).send({ error: "这次分析已经消失了。" });
+  if (job.status !== "done" || !job.result) return reply.code(409).send({ error: "结构化提取还没有完成。" });
+  if (!Object.prototype.hasOwnProperty.call(job.result, "extractedData")) {
+    return reply.code(404).send({ error: "这次任务没有请求结构化提取。" });
+  }
+  return reply.header("cache-control", "no-store").type("application/json; charset=utf-8").send(JSON.stringify(job.result.extractedData));
 });
 
 app.delete("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
@@ -177,7 +210,27 @@ function statusCodeOf(error: unknown): number | undefined {
   return (error as { statusCode?: number })?.statusCode;
 }
 
+function acceptDemoRequest(request: FastifyRequest, reply: FastifyReply): boolean {
+  if (!config.demoRequestsPerIpPerDay) return true;
+  const result = demoLimiter.consume(request.ip);
+  reply
+    .header("x-ratelimit-limit", config.demoRequestsPerIpPerDay)
+    .header("x-ratelimit-remaining", result.remaining)
+    .header("x-ratelimit-reset", Math.floor(result.resetAt / 1000));
+  if (result.allowed) return true;
+  reply.code(429).send({ error: "今天的公开演示次数已经用完，请明天再来，或在本地配置自己的模型 Key。" });
+  return false;
+}
+
 // 客户端把界面语言随请求带来，AI 生成文案按该语言输出；缺省中文。
 function requestLanguage(value: unknown): "en" | "zh" {
   return value === "en" ? "en" : "zh";
+}
+
+function multipartFieldValue(fields: unknown, name: string): unknown {
+  if (!fields || typeof fields !== "object") return undefined;
+  const raw = (fields as Record<string, unknown>)[name];
+  const field = Array.isArray(raw) ? raw[0] : raw;
+  if (!field || typeof field !== "object") return undefined;
+  return (field as { value?: unknown }).value;
 }

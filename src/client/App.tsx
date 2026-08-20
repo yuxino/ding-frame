@@ -20,7 +20,6 @@ const copy = {
       done: "Complete",
       failed: "Try again"
     } as Record<string, string>,
-    privacy: "Auto-deletes after 20 minutes",
     help: "How it works",
     badge: "AI VIDEO UNDERSTANDING",
     hero: "Understand a video from the moments that matter.",
@@ -38,11 +37,18 @@ const copy = {
     videoUrl: "Video URL",
     drop: "Drop a video here, or choose a file",
     ready: "Ready",
-    fileHint: "MP4, MOV, WebM · up to 15 minutes",
     publicUrl: "Public video URL",
     urlPlaceholder: "https://v.douyin.com/… or a direct video URL",
     urlHint: "Supports Douyin share links, Bilibili, YouTube and other public video URLs.",
     temporary: "Stored only while processing",
+    customExtract: "Custom extraction",
+    customHint: "Ask for specific data and define the JSON you want back",
+    analysisRequirement: "Analysis requirement",
+    instructionPlaceholder: "Example: Extract every product mentioned, its price, and the first timestamp where it appears.",
+    outputShape: "Expected JSON shape (optional)",
+    schemaPlaceholder: '{\n  "products": [\n    { "name": "string", "price": 0, "atMs": 0 }\n  ]\n}',
+    schemaHint: "Paste a JSON example or JSON Schema. Field names and nesting will be preserved.",
+    invalidSchema: "The expected JSON shape is not valid JSON.",
     starting: "Starting…",
     start: "Analyze video",
     retry: "Try again",
@@ -67,6 +73,11 @@ const copy = {
     restart: "Start over",
     clear: "Clear",
     aiSummary: "AI SUMMARY",
+    structuredData: "REQUESTED DATA",
+    structuredDataSub: "Returned in the JSON shape you requested",
+    copyJson: "Copy JSON",
+    copied: "Copied",
+    downloadJson: "Download JSON",
     duration: "Duration",
     frames: "Key frames",
     subtitleLines: "Subtitle lines",
@@ -98,7 +109,7 @@ const copy = {
     close: "Close",
     aboutTitle: "AI video understanding, without the clutter.",
     aboutText: "Koma temporarily stores the video while extracting frames, transcribing audio, and letting you review the result. Intermediate audio is deleted after analysis; the video, frames, and result disappear when the timer ends or when you clear them.",
-    aboutMuted: "Configure an Alibaba Cloud Model Studio API key for real ASR and vision analysis. Without one, Koma runs the full flow with demo data.",
+    aboutMuted: "Configure any supported ASR and vision providers for real analysis. Without model keys, Koma runs the default summary flow with demo data; custom extraction needs a real vision model.",
     gotIt: "Got it",
     language: "中文"
   },
@@ -115,7 +126,6 @@ const copy = {
       done: "分析完成",
       failed: "需要重试"
     } as Record<string, string>,
-    privacy: "20 分钟后自动消失",
     help: "使用说明",
     badge: "AI 视频理解",
     hero: "从关键瞬间，看懂一段视频。",
@@ -133,11 +143,18 @@ const copy = {
     videoUrl: "视频地址",
     drop: "拖进来，或点这里选择",
     ready: "已准备好",
-    fileHint: "MP4、MOV、WebM · 最长 15 分钟",
     publicUrl: "公开的视频地址",
     urlPlaceholder: "https://v.douyin.com/… 或视频直链",
     urlHint: "支持抖音分享链接、B站、YouTube 等公开链接与视频直链。",
     temporary: "仅在分析期间暂存",
+    customExtract: "自定义提取",
+    customHint: "写下分析要求，也可以指定要返回的 JSON",
+    analysisRequirement: "分析要求",
+    instructionPlaceholder: "例如：提取视频中出现的所有商品、价格，以及首次出现的时间。",
+    outputShape: "期望 JSON 结构（可选）",
+    schemaPlaceholder: '{\n  "products": [\n    { "name": "string", "price": 0, "atMs": 0 }\n  ]\n}',
+    schemaHint: "可粘贴 JSON 示例或 JSON Schema；字段名和嵌套结构会被保留。",
+    invalidSchema: "期望 JSON 结构不是有效 JSON。",
     starting: "正在放入…",
     start: "开始分析",
     retry: "重试",
@@ -162,6 +179,11 @@ const copy = {
     restart: "重新开始",
     clear: "清除本次",
     aiSummary: "AI 视频总结",
+    structuredData: "按要求提取的数据",
+    structuredDataSub: "按你指定的 JSON 结构返回",
+    copyJson: "复制 JSON",
+    copied: "已复制",
+    downloadJson: "下载 JSON",
     duration: "视频时长",
     frames: "关键画面",
     subtitleLines: "字幕句数",
@@ -193,7 +215,7 @@ const copy = {
     close: "关闭",
     aboutTitle: "AI 视频理解工作台",
     aboutText: "视频会暂存在服务端，用于抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起删除。",
-    aboutMuted: "配置百炼 API Key 后即可使用真实 ASR 与视觉分析；没有配置时会使用演示数据运行完整流程。",
+    aboutMuted: "配置任意受支持的听写与视觉模型后即可使用真实分析；没有模型 Key 时可演示默认总结流程，自定义提取需要真实视觉模型。",
     gotIt: "知道了",
     language: "EN"
   }
@@ -204,8 +226,21 @@ interface TranscriptLine { startMs: number; endMs: number; text: string; speaker
 interface Frame { filename: string; atMs: number; caption?: string; url: string; }
 interface Chapter { startMs: number; endMs: number; title: string; summary: string; }
 interface Tag { label: string; category: string; atMs: number; }
-interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; }
-interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; expiresAt: number; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; result: AnalysisResult | null; error: string | null; }
+interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; extractedData?: unknown; }
+interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; expiresAt: number; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown }; result: AnalysisResult | null; error: string | null; }
+interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number; resultTtlSeconds?: number }; }
+
+function parseOutputSchema(value: string, errorMessage: string): unknown {
+  const raw = value.trim();
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== "object") throw new Error(errorMessage);
+    return parsed;
+  } catch {
+    throw new Error(errorMessage);
+  }
+}
 
 function formatDate(timestamp: number, language: Language): string {
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
@@ -241,16 +276,34 @@ function App() {
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showCustomExtraction, setShowCustomExtraction] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [outputSchema, setOutputSchema] = useState("");
+  const [serviceInfo, setServiceInfo] = useState<ServiceInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const hasResult = job?.status === "done" && job.result;
   const progress = job?.progress?.percent ?? 0;
+  const maxMinutes = Math.max(1, Math.round((serviceInfo?.limits?.maxDurationSeconds || 15 * 60) / 60));
+  const maxMegabytes = Math.max(1, Math.round((serviceInfo?.limits?.maxUploadBytes || 500 * 1024 * 1024) / 1024 / 1024));
+  const ttlMinutes = Math.max(1, Math.round((serviceInfo?.limits?.resultTtlSeconds || 20 * 60) / 60));
+  const fileHint = language === "zh" ? `MP4、MOV、WebM · 最长 ${maxMinutes} 分钟 / ${maxMegabytes} MB` : `MP4, MOV, WebM · up to ${maxMinutes} min / ${maxMegabytes} MB`;
+  const privacy = language === "zh" ? `${ttlMinutes} 分钟后自动消失` : `Auto-deletes after ${ttlMinutes} minutes`;
 
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     document.title = language === "zh" ? "Koma — AI 视频理解" : "Koma — AI Video Understanding";
   }, [language]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/health", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<ServiceInfo> : null)
+      .then((info) => { if (info) setServiceInfo(info); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!job?.id || job.status === "done" || job.status === "failed") return undefined;
@@ -272,14 +325,15 @@ function App() {
   async function startAnalysis(event?: FormEvent) {
     event?.preventDefault(); setBusy(true); setError(""); setJob(null); setUploadPercent(null);
     try {
+      const parsedOutputSchema = parseOutputSchema(outputSchema, t.invalidSchema);
       if (mode === "upload") {
         if (!file) throw new Error(t.missingFile);
-        const jobId = await uploadWithProgress(file);
+        const jobId = await uploadWithProgress(file, parsedOutputSchema);
         const jobResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
         setJob(await jobResponse.json() as Job);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
-        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language }) });
+        const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: instruction.trim() || undefined, outputSchema: parsedOutputSchema }) });
         const body = await response.json().catch(() => ({})) as { jobId?: string; error?: string };
         if (!response.ok) throw new Error(body.error || t.startFailed);
         const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
@@ -291,7 +345,7 @@ function App() {
   }
 
   // 用 XMLHttpRequest 上传以拿到真实进度；返回创建的任务 id。
-  function uploadWithProgress(video: File): Promise<string> {
+  function uploadWithProgress(video: File, parsedOutputSchema: unknown): Promise<string> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `/api/analyze/upload?lang=${language}`);
@@ -306,6 +360,10 @@ function App() {
       };
       xhr.onerror = () => reject(new Error(t.startFailed));
       const formData = new FormData();
+      // @fastify/multipart exposes fields already received when request.file() resolves,
+      // so append extraction fields before the video part.
+      if (instruction.trim()) formData.append("instruction", instruction.trim());
+      if (parsedOutputSchema !== undefined) formData.append("outputSchema", JSON.stringify(parsedOutputSchema));
       formData.append("video", video);
       xhr.send(formData);
     });
@@ -331,7 +389,7 @@ function App() {
 
   return <div className="app-shell">
     <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
-      <span className="privacy-pill"><i />{t.privacy}</span>
+      <span className="privacy-pill"><i />{privacy}</span>
       <button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
       <button className="header-button" type="button" onClick={() => setShowSettings(true)}><Glyph name="info" size={16} />{t.help}</button>
     </div></div></header>
@@ -357,8 +415,15 @@ function App() {
           </div>
           {mode === "upload" ? <div className={`drop-zone ${file ? "has-file" : ""}`} onClick={() => fileInputRef.current?.click()} onDragOver={(event: DragEvent) => event.preventDefault()} onDrop={(event: DragEvent) => { event.preventDefault(); selectFile(event.dataTransfer.files?.[0]); }} role="button" tabIndex={0} onKeyDown={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click(); }}>
             <input ref={fileInputRef} type="file" accept="video/*" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => selectFile(event.target.files?.[0])} />
-            <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : t.fileHint}</small>
+            <span className="drop-icon"><Glyph name="upload" size={22} /></span><strong>{file ? file.name : t.drop}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ${t.ready}` : fileHint}</small>
           </div> : <label className="url-field"><span><Glyph name="link" size={16} />{t.publicUrl}</span><input ref={urlInputRef} type="text" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t.urlPlaceholder} /><small>{t.urlHint}</small></label>}
+          <div className={`custom-extraction ${showCustomExtraction ? "open" : ""} ${instruction.trim() || outputSchema.trim() ? "configured" : ""}`}>
+            <button className="custom-extraction-toggle" type="button" aria-expanded={showCustomExtraction} onClick={() => setShowCustomExtraction((value) => !value)}><span><Glyph name="spark" size={15} /><strong>{t.customExtract}</strong><small>{t.customHint}</small></span><i>{showCustomExtraction ? "−" : "+"}</i></button>
+            {showCustomExtraction && <div className="custom-extraction-fields">
+              <label><span>{t.analysisRequirement}</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} maxLength={4000} rows={3} placeholder={t.instructionPlaceholder} /></label>
+              <label><span>{t.outputShape}</span><textarea className="schema-input" value={outputSchema} onChange={(event) => setOutputSchema(event.target.value)} maxLength={12000} rows={6} spellCheck={false} placeholder={t.schemaPlaceholder} /><small>{t.schemaHint}</small></label>
+            </div>}
+          </div>
           <div className="capture-foot"><span><i />{t.temporary}</span><button className="primary-button" type="submit" disabled={busy}>{busy ? (uploadPercent !== null ? `${t.uploading} ${uploadPercent}%` : t.starting) : t.start}<Glyph name="arrow" size={17} /></button></div>
           {uploadPercent !== null && <div className="upload-track" aria-label={`${t.uploadProgress}: ${uploadPercent}%`}><span style={{ width: `${uploadPercent}%` }} /></div>}
           {error && <p className="form-error" role="alert">{error}</p>}
@@ -406,6 +471,7 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
   return <section className="result-layout"><div className="result-main">
     <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={onClear}><Glyph name="trash" size={16} />{t.clear}</button></div></div>
     <div className="summary-block"><span><Glyph name="spark" size={15} />{t.aiSummary}</span><p>{result.summary}</p></div>
+    {Object.prototype.hasOwnProperty.call(result, "extractedData") && <StructuredData data={result.extractedData} jobId={job.id} language={language} />}
     <div className="stat-row"><div><span>{t.duration}</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>{t.frames}</span><strong>{result.frames.length}</strong></div><div><span>{t.subtitleLines}</span><strong>{result.transcript.length}</strong></div><div><span>{t.autoDelete}</span><strong className="countdown">{countdown}</strong></div></div>
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
@@ -414,6 +480,31 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
   </div>
   <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="clock" size={14} />{Math.ceil(remaining / 60000)} {t.remaining}</div></aside>
   {previewFrame && <FramePreview frame={previewFrame} onClose={() => setPreviewFrame(null)} onPlay={() => syncToTime(previewFrame.atMs)} language={language} />}
+  </section>;
+}
+
+function StructuredData({ data, jobId, language }: { data: unknown; jobId: string; language: Language }) {
+  const t = copy[language];
+  const [copied, setCopied] = useState(false);
+  const json = JSON.stringify(data, null, 2) ?? "null";
+  async function copyJson() {
+    await navigator.clipboard.writeText(json);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+  function downloadJson() {
+    const blob = new Blob([`${json}\n`], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `koma-${jobId}-extraction.json`;
+    link.click();
+    URL.revokeObjectURL(href);
+  }
+  return <section className="structured-panel">
+    <div className="section-heading"><span>{t.structuredData}</span><small>{t.structuredDataSub}</small></div>
+    <pre>{json}</pre>
+    <div className="structured-actions"><button type="button" onClick={copyJson}>{copied ? t.copied : t.copyJson}</button><button type="button" onClick={downloadJson}>{t.downloadJson}</button><a href={`/api/jobs/${jobId}/extraction`} target="_blank" rel="noreferrer">API</a></div>
   </section>;
 }
 

@@ -18,6 +18,8 @@ Upload a video or paste a URL. Koma extracts key frames, transcribes speech, and
 - **Tags** — AI-generated content tags with timestamps that jump to the first appearance.
 - **Timeline navigation** — jump from any chapter, tag, subtitle, or frame straight to that moment in the video.
 - **Language-aware output** — titles, summaries, chapters, tags, and captions follow the UI language (English or Chinese).
+- **Custom extraction** — provide a natural-language requirement and optional JSON example or JSON Schema; copy/download the result or retrieve the raw JSON through the API.
+- **Multiple AI backends** — presets for DashScope, OpenAI, Gemini, OpenRouter, and Groq, plus any OpenAI-compatible vision or transcription endpoint.
 - **Smart downloads** — share links are resolved before downloading; overlong videos are rejected up front instead of after the whole file arrives.
 - **Temporary processing** — video and analysis data are cleaned up automatically after the TTL.
 
@@ -32,7 +34,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-Without any API keys, Koma runs the full flow with demo data. Configure an Alibaba Cloud Model Studio API key for real ASR and vision analysis (see [Configuration](docs/CONFIGURATION.md)).
+Without any API keys, Koma runs the default summary flow with demo data; custom extraction requires a real vision model. Providers can be mixed: use DashScope for both stages, or pair Groq Whisper with OpenRouter's free vision router for a low-cost public demo (see [Configuration](docs/CONFIGURATION.md)).
 
 ## CLI
 
@@ -42,8 +44,18 @@ Analyze a video or URL from the terminal:
 node dist-server/cli.js <video path or URL> [--lang en|zh] [--json out.json] [--frames-dir dir]
 ```
 
+Extract requested data and emit only the target JSON:
+
+```bash
+node dist-server/cli.js demo.mp4 \
+  --instruction "Extract every product, price, and first appearance time" \
+  --schema product-shape.json \
+  --extraction-only
+```
+
 ## Docs
 
 - [Configuration](docs/CONFIGURATION.md) — environment variables
+- [HTTP API](docs/API.md) — submit jobs and retrieve structured results
 - [Deployment](DEPLOY.md) — server setup with PM2 + nginx
 - [Design decisions](docs/decisions/)

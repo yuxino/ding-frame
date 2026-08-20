@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { compactTranscriptText, groupWordsToSubtitles, requestSegmentSubtitle, transcribe } from "./asr.js";
+import { compactTranscriptText, groupWordsToSubtitles, requestOpenAICompatibleSubtitle, requestSegmentSubtitle, transcribe } from "./asr.js";
 
 const tempDirs = [];
 
@@ -115,6 +115,63 @@ describe("Fun-ASR subtitle adapter", () => {
         headers: { "content-type": "application/json" }
       })
     })).rejects.toThrow("免费额度已用完");
+  });
+});
+
+describe("OpenAI-compatible subtitle adapter", () => {
+  it("posts multipart audio and converts second timestamps to milliseconds", async () => {
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-openai-asr-test-"));
+    tempDirs.push(dir);
+    const path = join(dir, "segment-000.mp3");
+    await writeFile(path, Buffer.from([0x49, 0x44, 0x33, 0x04]));
+    let captured: { url: string; options: RequestInit } | undefined;
+
+    const lines = await requestOpenAICompatibleSubtitle({
+      segment: { path, startMs: 0, endMs: 60_000 },
+      apiKey: "groq-test-key",
+      baseUrl: "https://api.groq.com/openai/v1/",
+      model: "whisper-large-v3-turbo",
+      fetchImpl: async (url, options) => {
+        captured = { url: String(url), options: options || {} };
+        return new Response(JSON.stringify({
+          text: "第一句。第二句。",
+          segments: [
+            { start: 0.25, end: 1.5, text: " 第一句。 " },
+            { start: 2, end: 3.125, text: "第二句。" }
+          ]
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+    });
+
+    expect(captured?.url).toBe("https://api.groq.com/openai/v1/audio/transcriptions");
+    expect((captured?.options.headers as Record<string, string>).Authorization).toBe("Bearer groq-test-key");
+    const form = captured?.options.body as FormData;
+    expect(form.get("model")).toBe("whisper-large-v3-turbo");
+    expect(form.get("response_format")).toBe("verbose_json");
+    expect(lines).toEqual([
+      { startMs: 250, endMs: 1500, text: "第一句。" },
+      { startMs: 2000, endMs: 3125, text: "第二句。" }
+    ]);
+  });
+
+  it("adds chunk offsets for Groq/OpenAI-compatible providers", async () => {
+    const dir = await mkdtemp(join(os.tmpdir(), "koma-openai-asr-test-"));
+    tempDirs.push(dir);
+    const path = join(dir, "segment-001.mp3");
+    await writeFile(path, "audio");
+
+    const lines = await transcribe({
+      audioSegments: [{ path, startMs: 60_000, endMs: 120_000 }],
+      provider: "groq",
+      apiKey: "key",
+      baseUrl: "https://api.groq.com/openai/v1",
+      model: "whisper-large-v3-turbo",
+      fetchImpl: async () => new Response(JSON.stringify({
+        segments: [{ start: 1, end: 2.5, text: "带偏移的字幕" }]
+      }), { status: 200, headers: { "content-type": "application/json" } })
+    });
+
+    expect(lines).toEqual([{ startMs: 61_000, endMs: 62_500, text: "带偏移的字幕" }]);
   });
 });
 

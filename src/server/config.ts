@@ -1,20 +1,110 @@
 import os from "node:os";
 import "dotenv/config";
 
+export type AsrProvider = "mock" | "dashscope" | "groq" | "openai" | "openai-compatible";
+export type VisionProvider = "mock" | "dashscope" | "openai" | "gemini" | "openrouter" | "groq" | "openai-compatible";
+
+interface ProviderPreset {
+  baseUrl: string;
+  model: string;
+  keyEnv: string;
+}
+
+export const asrProviderPresets: Record<Exclude<AsrProvider, "mock">, ProviderPreset> = {
+  dashscope: {
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "fun-asr-flash-2026-06-15",
+    keyEnv: "DASHSCOPE_API_KEY"
+  },
+  groq: {
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "whisper-large-v3-turbo",
+    keyEnv: "GROQ_API_KEY"
+  },
+  openai: {
+    baseUrl: "https://api.openai.com/v1",
+    model: "whisper-1",
+    keyEnv: "OPENAI_API_KEY"
+  },
+  "openai-compatible": {
+    baseUrl: "",
+    model: "whisper-1",
+    keyEnv: "ASR_API_KEY"
+  }
+};
+
+export const visionProviderPresets: Record<Exclude<VisionProvider, "mock">, ProviderPreset> = {
+  dashscope: {
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen3-vl-flash",
+    keyEnv: "DASHSCOPE_API_KEY"
+  },
+  openai: {
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4.1-mini",
+    keyEnv: "OPENAI_API_KEY"
+  },
+  gemini: {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-2.5-flash",
+    keyEnv: "GEMINI_API_KEY"
+  },
+  openrouter: {
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "openrouter/free",
+    keyEnv: "OPENROUTER_API_KEY"
+  },
+  groq: {
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "meta-llama/llama-4-scout-17b-16e-instruct",
+    keyEnv: "GROQ_API_KEY"
+  },
+  "openai-compatible": {
+    baseUrl: "",
+    model: "",
+    keyEnv: "VISION_API_KEY"
+  }
+};
+
 const dashscopeApiKey = process.env.DASHSCOPE_API_KEY || "";
 const dashscopeWorkspaceId = process.env.DASHSCOPE_WORKSPACE_ID || "";
 const dashscopeBaseUrl = process.env.DASHSCOPE_BASE_URL
   || (dashscopeWorkspaceId
     ? `https://${dashscopeWorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
-    : "https://dashscope.aliyuncs.com/compatible-mode/v1");
-const visionApiKey = process.env.VISION_API_KEY || dashscopeApiKey;
-const requestedAsrProvider = process.env.ASR_PROVIDER || (dashscopeApiKey ? "dashscope" : "mock");
+    : visionProviderPresets.dashscope.baseUrl);
+const requestedAsrProvider = normalizeProvider<AsrProvider>(
+  process.env.ASR_PROVIDER,
+  ["mock", "dashscope", "groq", "openai", "openai-compatible"],
+  dashscopeApiKey ? "dashscope" : "mock"
+);
+// ANALYSIS_PROVIDER 是 0.1 版变量，继续接受它以免旧部署升级后失效。
+const legacyVisionProvider = process.env.ANALYSIS_PROVIDER === "openai-compatible" ? "openai-compatible" : process.env.ANALYSIS_PROVIDER;
+const requestedVisionProvider = normalizeProvider<VisionProvider>(
+  process.env.VISION_PROVIDER || legacyVisionProvider,
+  ["mock", "dashscope", "openai", "gemini", "openrouter", "groq", "openai-compatible"],
+  dashscopeApiKey ? "dashscope" : "mock"
+);
 const requestedDiarization = process.env.ASR_DIARIZATION;
-const requestedAnalysisProvider = process.env.ANALYSIS_PROVIDER || (visionApiKey ? "openai-compatible" : "mock");
+const asrPreset = requestedAsrProvider === "mock" ? undefined : asrProviderPresets[requestedAsrProvider];
+const visionPreset = requestedVisionProvider === "mock" ? undefined : visionProviderPresets[requestedVisionProvider];
+const asrApiKey = process.env.ASR_API_KEY || providerKey(requestedAsrProvider, asrPreset?.keyEnv);
+// 0.1 版把 DashScope 当作 openai-compatible 使用，只有在自定义 Key/Base URL
+// 都未填写时才启用该回退，避免把 DashScope Key 误发给其他兼容服务。
+const legacyDashscopeVision = requestedVisionProvider === "openai-compatible"
+  && !process.env.VISION_API_KEY
+  && !process.env.VISION_BASE_URL
+  && Boolean(dashscopeApiKey);
+const visionApiKey = process.env.VISION_API_KEY
+  || (legacyDashscopeVision ? dashscopeApiKey : providerKey(requestedVisionProvider, visionPreset?.keyEnv));
 
 const integerEnv = (name: string, fallback: number): number => {
   const value = Number.parseInt(process.env[name] || "", 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
+const nonNegativeIntegerEnv = (name: string, fallback: number): number => {
+  const value = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
 };
 
 const floatEnv = (name: string, fallback: number, min: number, max: number): number => {
@@ -22,64 +112,78 @@ const floatEnv = (name: string, fallback: number, min: number, max: number): num
   return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
 };
 
-// 用户显式声明要接真实模型，却没有可用 key 时，安全回退到演示数据，
-// 保证“零配置也能跑通完整流程”；配置错误的其他取值仍会在适配器里报错。
-export function resolveProvider(rawProvider: string, hasKey: boolean): string {
-  return (rawProvider === "dashscope" || rawProvider === "openai-compatible") && !hasKey ? "mock" : rawProvider;
+const booleanEnv = (name: string, fallback = false): boolean => {
+  const value = String(process.env[name] || "").trim().toLowerCase();
+  if (["1", "true", "on", "yes"].includes(value)) return true;
+  if (["0", "false", "off", "no"].includes(value)) return false;
+  return fallback;
+};
+
+export function resolveProvider<T extends string>(rawProvider: T, hasKey: boolean): T | "mock" {
+  return rawProvider !== "mock" && !hasKey ? "mock" : rawProvider;
+}
+
+export function normalizeProvider<T extends string>(rawProvider: string | undefined, supported: readonly T[], fallback: T): T {
+  const value = String(rawProvider || "").trim().toLowerCase() as T;
+  return value && supported.includes(value) ? value : fallback;
+}
+
+function providerKey(provider: AsrProvider | VisionProvider, keyEnv?: string): string {
+  if (provider === "mock" || !keyEnv) return "";
+  return process.env[keyEnv] || "";
 }
 
 export const config = {
   port: integerEnv("PORT", 3000),
+  trustProxy: booleanEnv("TRUST_PROXY"),
+  // 0 表示关闭。公开演示建议设为 3～10，按来源 IP 和 UTC 日期限流。
+  demoRequestsPerIpPerDay: nonNegativeIntegerEnv("DEMO_REQUESTS_PER_IP_PER_DAY", 0),
   maxUploadBytes: integerEnv("MAX_UPLOAD_BYTES", 500 * 1024 * 1024),
   maxDurationSeconds: integerEnv("MAX_DURATION_SECONDS", 15 * 60),
-  // 抽帧宽度：关键帧统一缩到这一宽度（保持比例），太大浪费存储和 API 流量
   frameWidth: integerEnv("FRAME_WIDTH", 1280),
-  // 场景检测阈值（0–1）：画面差异超过它才作为“转场/重点”帧优先保留；
-  // 值越小抽到的重点帧越多，调大后更保守。
   frameSceneThreshold: floatEnv("FRAME_SCENE_THRESHOLD", 0.4, 0.05, 0.95),
   maxFrames: integerEnv("MAX_FRAMES", 18),
-  // 并发送视觉模型理解的帧数上限；结合抽帧时间线从全部关键帧里再挑代表帧
-  visionMaxFrames: integerEnv("VISION_MAX_FRAMES", 10),
-  // 喂给视觉模型的听写文本上限（字符）。过长时保留头尾、中间省略，
-  // 保证长视频的开场和结尾口述内容不丢。
+  // Groq 的当前视觉模型单次最多接收 5 张图；其他兼容服务默认 10 张。
+  visionMaxFrames: requestedVisionProvider === "groq" ? Math.min(integerEnv("VISION_MAX_FRAMES", 5), 5) : integerEnv("VISION_MAX_FRAMES", 10),
   visionTranscriptChars: integerEnv("VISION_TRANSCRIPT_CHARS", 30000),
-  // 视觉模型输出上限（tokens）。章节总结的 summary 各两三句，输出量远大于
-  // 旧版 highlight，上限太低会导致 JSON 被截断而解析失败。
   visionMaxTokens: integerEnv("VISION_MAX_TOKENS", 2000),
-  // 同时执行的分析任务数上限：ffmpeg 抽帧/转码和 ASR 都吃资源，
-  // 超出的任务排队等待，避免几个大视频同时上传把服务拖垮。
   maxConcurrentJobs: integerEnv("MAX_CONCURRENT_JOBS", 2),
   resultTtlSeconds: integerEnv("RESULT_TTL_SECONDS", 20 * 60),
   tempRoot: process.env.TEMP_ROOT || os.tmpdir(),
-  asrProvider: resolveProvider(requestedAsrProvider, Boolean(dashscopeApiKey)),
-  analysisProvider: resolveProvider(requestedAnalysisProvider, Boolean(visionApiKey)),
+  asrProvider: resolveProvider(requestedAsrProvider, Boolean(asrApiKey)) as AsrProvider,
+  visionProvider: resolveProvider(requestedVisionProvider, Boolean(visionApiKey)) as VisionProvider,
+  // 兼容旧代码/旧健康检查字段；新代码统一使用 visionProvider。
+  analysisProvider: resolveProvider(requestedVisionProvider, Boolean(visionApiKey)) as VisionProvider,
+  asrApiKey,
+  asrBaseUrl: process.env.ASR_BASE_URL || (requestedAsrProvider === "dashscope" ? dashscopeBaseUrl : asrPreset?.baseUrl || ""),
+  asrModel: process.env.ASR_MODEL || asrPreset?.model || "",
+  asrSegmentSeconds: integerEnv("ASR_SEGMENT_SECONDS", 60),
+  asrMaxSegmentBytes: integerEnv("ASR_MAX_SEGMENT_BYTES", 8 * 1024 * 1024),
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, ""),
+  asrDiarization: requestedDiarization === "on" ? true : requestedDiarization === "off" ? false : Boolean(process.env.PUBLIC_BASE_URL),
+  aiTimeoutMs: integerEnv("AI_TIMEOUT_MS", integerEnv("DASHSCOPE_TIMEOUT_MS", 120000)),
+  visionApiKey,
+  visionBaseUrl: process.env.VISION_BASE_URL || (requestedVisionProvider === "dashscope" || legacyDashscopeVision ? dashscopeBaseUrl : visionPreset?.baseUrl || ""),
+  visionModel: process.env.VISION_MODEL || (legacyDashscopeVision ? visionProviderPresets.dashscope.model : visionPreset?.model || ""),
   dashscopeApiKey,
   dashscopeWorkspaceId,
   dashscopeBaseUrl,
-  dashscopeModel: process.env.ASR_MODEL || "fun-asr-flash-2026-06-15",
-  asrSegmentSeconds: integerEnv("ASR_SEGMENT_SECONDS", 60),
-  asrMaxSegmentBytes: integerEnv("ASR_MAX_SEGMENT_BYTES", 8 * 1024 * 1024),
-  // 说话人分离需要把整段音频交给百炼异步转写（要求服务有公网地址）。
-  // 默认在配置了 PUBLIC_BASE_URL 时开启，也可以用 ASR_DIARIZATION=on/off 强制指定。
-  publicBaseUrl: (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, ""),
-  asrDiarization: requestedDiarization === "on" ? true : requestedDiarization === "off" ? false : Boolean(process.env.PUBLIC_BASE_URL),
-  dashscopeTimeoutMs: integerEnv("DASHSCOPE_TIMEOUT_MS", 120000),
-  visionApiKey,
-  visionBaseUrl: process.env.VISION_BASE_URL || dashscopeBaseUrl,
-  visionModel: process.env.VISION_MODEL || "qwen3-vl-flash"
+  // 旧字段保留一个版本，方便现有部署平滑升级。
+  dashscopeModel: process.env.ASR_MODEL || asrProviderPresets.dashscope.model,
+  dashscopeTimeoutMs: integerEnv("AI_TIMEOUT_MS", integerEnv("DASHSCOPE_TIMEOUT_MS", 120000))
 } as const;
 
-if (config.asrProvider === "mock" && requestedAsrProvider === "dashscope") {
-  console.warn("[koma] 已声明 ASR_PROVIDER=dashscope 但缺少 DASHSCOPE_API_KEY，自动改用演示听写。");
+if (config.asrProvider === "mock" && requestedAsrProvider !== "mock") {
+  console.warn(`[koma] 已声明 ASR_PROVIDER=${requestedAsrProvider} 但缺少 ${asrPreset?.keyEnv || "API Key"}，自动改用演示听写。`);
 }
-if (config.analysisProvider === "mock" && requestedAnalysisProvider === "openai-compatible") {
-  console.warn("[koma] 已声明 ANALYSIS_PROVIDER=openai-compatible 但缺少可用 API Key，自动改用演示画面分析。");
+if (config.visionProvider === "mock" && requestedVisionProvider !== "mock") {
+  console.warn(`[koma] 已声明 VISION_PROVIDER=${requestedVisionProvider} 但缺少 ${visionPreset?.keyEnv || "API Key"}，自动改用演示画面分析。`);
 }
 
 export function asrIsConfigured(): boolean {
-  return config.asrProvider === "dashscope" && Boolean(config.dashscopeApiKey);
+  return config.asrProvider !== "mock" && Boolean(config.asrApiKey);
 }
 
 export function analysisIsConfigured(): boolean {
-  return config.analysisProvider === "openai-compatible" && Boolean(config.visionApiKey);
+  return config.visionProvider !== "mock" && Boolean(config.visionApiKey);
 }

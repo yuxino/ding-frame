@@ -3,12 +3,13 @@
 // Usage:
 //   node dist-server/cli.js <video path or URL> [--json output] [--frames-dir directory]
 // Progress is written to stderr. Analysis output is written to stdout or --json.
-import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { config } from "./config.js";
 import { downloadUrl } from "./download.js";
 import { analyzeMedia } from "./pipeline.js";
 import { resolveVideoUrl } from "./resolver.js";
+import { parseAnalysisSpec } from "./analysis-spec.js";
 
 const HELP = `Koma CLI
 
@@ -19,6 +20,9 @@ Options:
   --json <path>        Write analysis result to a JSON file
   --frames-dir <path>  Keep extracted key frames in this directory
   --lang <en|zh>       Language for AI-generated copy (title, summary, tags); default zh
+  --instruction <text> Custom extraction requirement
+  --schema <path>      JSON example or JSON Schema file for extractedData
+  --extraction-only    Output only the requested JSON instead of the full Koma result
   -h, --help           Show help
 `;
 
@@ -27,26 +31,35 @@ interface CliOptions {
   jsonPath: string | null;
   framesDir: string | null;
   language: "en" | "zh";
+  instruction: string | null;
+  schemaPath: string | null;
+  extractionOnly: boolean;
 }
 
 async function main(): Promise<void> {
-  const { input, jsonPath, framesDir, language } = parseArgs(process.argv.slice(2));
+  const { input, jsonPath, framesDir, language, instruction, schemaPath, extractionOnly } = parseArgs(process.argv.slice(2));
   const tempDir = await mkdtemp(join(config.tempRoot, "koma-cli-"));
   let inputPath: string;
   try {
     inputPath = await prepareInput(input, tempDir);
     const title = basename(inputPath);
+    const outputSchema = schemaPath ? await readFile(resolve(schemaPath), "utf8") : undefined;
+    const analysisSpec = parseAnalysisSpec({ instruction, outputSchema });
+    if (extractionOnly && !analysisSpec.instruction && analysisSpec.outputSchema === undefined) {
+      throw new Error("--extraction-only requires --instruction or --schema.");
+    }
     const result = await analyzeMedia({
       inputPath,
       title,
       framesDir: join(tempDir, "frames"),
       audioDir: join(tempDir, "audio"),
       language,
+      analysisSpec,
       onProgress: (progress) => console.error(`[koma] ${progress.percent}% ${progress.detail}`)
     });
 
-    if (config.asrProvider === "mock") console.error("[koma] ASR is running in demo mode. Configure DASHSCOPE_API_KEY for real transcription.");
-    if (config.analysisProvider === "mock") console.error("[koma] Vision analysis is running in demo mode. Configure a vision model API key for real analysis.");
+    if (config.asrProvider === "mock") console.error("[koma] ASR is running in demo mode. Configure an ASR provider key for real transcription.");
+    if (config.visionProvider === "mock") console.error("[koma] Vision analysis is running in demo mode. Configure a vision model API key for real analysis.");
 
     if (framesDir) {
       const target = resolve(framesDir);
@@ -59,7 +72,7 @@ async function main(): Promise<void> {
       console.error(`[koma] Key frames saved to ${target}`);
     }
 
-    const payload = JSON.stringify(result, null, 2) + "\n";
+    const payload = JSON.stringify(extractionOnly ? result.extractedData : result, null, 2) + "\n";
     if (jsonPath) {
       await writeFile(resolve(jsonPath), payload, "utf8");
       console.error(`[koma] Result written to ${jsonPath}`);
@@ -93,7 +106,7 @@ async function prepareInput(input: string, tempDir: string): Promise<string> {
 }
 
 function parseArgs(args: string[]): CliOptions {
-  const options: CliOptions = { input: "", jsonPath: null, framesDir: null, language: "zh" };
+  const options: CliOptions = { input: "", jsonPath: null, framesDir: null, language: "zh", instruction: null, schemaPath: null, extractionOnly: false };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--help" || arg === "-h") {
@@ -109,6 +122,14 @@ function parseArgs(args: string[]): CliOptions {
       const value = args[++index];
       if (value !== "en" && value !== "zh") throw new Error("--lang accepts en or zh.");
       options.language = value;
+    } else if (arg === "--instruction") {
+      options.instruction = args[++index];
+      if (!options.instruction) throw new Error("--instruction requires text.");
+    } else if (arg === "--schema") {
+      options.schemaPath = args[++index];
+      if (!options.schemaPath) throw new Error("--schema requires a JSON file path.");
+    } else if (arg === "--extraction-only") {
+      options.extractionOnly = true;
     } else if (arg.startsWith("-")) {
       throw new Error(`Unknown option: ${arg}`);
     } else if (!options.input) {

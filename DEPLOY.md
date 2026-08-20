@@ -13,12 +13,17 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `SERVER_HOST` | Server IP |
 | `SERVER_USER` | SSH user, usually `root` |
 | `SERVER_PASSWORD` | SSH password |
-| `DASHSCOPE_API_KEY` | Alibaba Cloud Model Studio API key |
-| `ASR_PROVIDER` | `dashscope` |
-| `ASR_MODEL` | `fun-asr-flash-2026-06-15` |
-| `ANALYSIS_PROVIDER` | `openai-compatible` |
-| `VISION_MODEL` | `qwen3-vl-flash` |
+| `ASR_PROVIDER` | For example `groq` or `dashscope` |
+| `VISION_PROVIDER` | For example `openrouter`, `gemini`, or `dashscope` |
+| `GROQ_API_KEY` | Groq key when using Groq ASR/vision |
+| `OPENROUTER_API_KEY` | OpenRouter key when using OpenRouter vision |
+| `DASHSCOPE_API_KEY` | DashScope key when using DashScope |
+| `OPENAI_API_KEY` | OpenAI key when using OpenAI |
+| `GEMINI_API_KEY` | Gemini key when using Gemini vision |
+| `ASR_MODEL` | Optional provider-model override |
+| `VISION_MODEL` | Optional provider-model override |
 | `PUBLIC_BASE_URL` | Optional public URL for speaker diarization |
+| `DEMO_REQUESTS_PER_IP_PER_DAY` | Optional public-demo daily allowance, such as `3` |
 
 ## Server Setup
 
@@ -44,7 +49,9 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # This is a single trusted proxy. Overwrite, rather than append, so
+        # clients cannot spoof the address used by Koma's demo rate limiter.
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }

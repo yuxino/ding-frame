@@ -18,6 +18,8 @@
 - **内容标签** — AI 生成带时间的标签，点击跳到首次出现的位置。
 - **时间线跳转** — 从章节、标签、字幕、关键帧直接跳到视频对应位置。
 - **语言跟随** — 标题、总结、章节、标签、画面描述随界面语言输出（中文或英文）。
+- **按要求提取** — 输入自然语言分析要求，并可指定 JSON 示例或 JSON Schema；网页可复制/下载结果，API 可直接返回提取出的 JSON。
+- **多模型后端** — 内置百炼、OpenAI、Gemini、OpenRouter 和 Groq 预设，也可以接入任意兼容 OpenAI API 的视觉或听写服务。
 - **智能下载** — 分享链接先解析成真实地址再下载；超长视频在下载前就被拒绝，不用白等整段拉完。
 - **临时处理** — 视频和分析数据在 TTL 到期后自动清理。
 
@@ -32,7 +34,7 @@ npm run dev
 
 打开 `http://localhost:5173`。
 
-不配置任何 API Key 也能用演示数据跑通完整流程；配置阿里云百炼 API Key 后启用真实语音转写与画面分析（见 [配置](docs/CONFIGURATION.zh-CN.md)）。
+不配置任何 API Key 也能用演示数据跑通默认总结流程；自定义结构化提取需要真实视觉模型。模型可以按需组合：例如百炼同时负责听写和视觉，或使用 Groq Whisper 听写、OpenRouter 免费视觉模型完成一个低成本公开演示（见 [配置](docs/CONFIGURATION.zh-CN.md)）。
 
 ## CLI
 
@@ -42,8 +44,18 @@ npm run dev
 node dist-server/cli.js <视频路径或链接> [--lang en|zh] [--json 输出.json] [--frames-dir 目录]
 ```
 
+按要求提取并只输出目标 JSON：
+
+```bash
+node dist-server/cli.js demo.mp4 \
+  --instruction "提取所有商品、价格和首次出现时间" \
+  --schema product-shape.json \
+  --extraction-only
+```
+
 ## 文档
 
 - [配置](docs/CONFIGURATION.zh-CN.md) — 环境变量说明
+- [HTTP API](docs/API.zh-CN.md) — 提交任务与读取结构化结果
 - [部署](DEPLOY.md) — PM2 + nginx 部署
 - [设计决策](docs/decisions/)

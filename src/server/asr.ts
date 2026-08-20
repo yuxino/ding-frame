@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { config } from "./config.js";
 import { registerTempAudio, removeTempAudio } from "./temp-audio.js";
 import { extractFullAudio } from "./video.js";
@@ -30,30 +30,22 @@ export async function transcribe({
   durationMs,
   fetchImpl = fetch,
   provider = config.asrProvider,
-  apiKey = config.dashscopeApiKey,
-  baseUrl = config.dashscopeBaseUrl,
-  model = config.dashscopeModel,
+  apiKey = config.asrApiKey,
+  baseUrl = config.asrBaseUrl,
+  model = config.asrModel,
   maxBytes = config.asrMaxSegmentBytes,
-  timeoutMs = config.dashscopeTimeoutMs,
+  timeoutMs = config.aiTimeoutMs,
   signal
 }: TranscribeOptions): Promise<TranscriptLine[]> {
   if (provider === "mock") return mockTranscript(durationMs);
-  if (provider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${provider}`);
-  if (!apiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用真实听写。");
+  if (!apiKey || !baseUrl || !model) throw new Error(`ASR_PROVIDER=${provider} 缺少 API Key、Base URL 或模型配置。`);
 
   const transcript: TranscriptLine[] = [];
   for (const segment of audioSegments || []) {
     if (signal?.aborted) throw new DOMException("分析已取消。", "AbortError");
-    const lines = await requestSegmentSubtitle({
-      segment,
-      apiKey,
-      baseUrl,
-      model,
-      maxBytes,
-      timeoutMs,
-      fetchImpl,
-      signal
-    });
+    const lines = provider === "dashscope"
+      ? await requestSegmentSubtitle({ segment, apiKey, baseUrl, model, maxBytes, timeoutMs, fetchImpl, signal })
+      : await requestOpenAICompatibleSubtitle({ segment, apiKey, baseUrl, model, maxBytes, timeoutMs, fetchImpl, signal });
     for (const line of lines) {
       transcript.push({
         ...line,
@@ -79,7 +71,7 @@ export async function transcribeFullAudio({
   signal?: AbortSignal;
 }): Promise<TranscriptLine[]> {
   if (config.asrProvider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${config.asrProvider}`);
-  if (!config.dashscopeApiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用真实听写。");
+  if (!config.asrApiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用说话人分离。");
   if (!publicBaseUrl) throw new Error("说话人分离需要配置 PUBLIC_BASE_URL（服务的公网地址）。");
 
   const audioPath = join(audioDir, `diarization-${randomUUID()}.mp3`);
@@ -89,21 +81,21 @@ export async function transcribeFullAudio({
   try {
     const taskId = await submitAsrTask({
       fileUrl,
-      apiKey: config.dashscopeApiKey,
-      baseUrl: config.dashscopeBaseUrl,
+      apiKey: config.asrApiKey,
+      baseUrl: config.asrBaseUrl,
       model: asyncAsrModel,
-      timeoutMs: config.dashscopeTimeoutMs,
+      timeoutMs: config.aiTimeoutMs,
       fetchImpl,
       signal
     });
     const task = await pollAsrTask({
       taskId,
-      apiKey: config.dashscopeApiKey,
-      baseUrl: config.dashscopeBaseUrl,
-      timeoutMs: Math.max(120_000, config.dashscopeTimeoutMs * 3),
+      apiKey: config.asrApiKey,
+      baseUrl: config.asrBaseUrl,
+      timeoutMs: Math.max(120_000, config.aiTimeoutMs * 3),
       signal
     });
-    return await parseDiarizationTask(task, { apiKey: config.dashscopeApiKey, timeoutMs: config.dashscopeTimeoutMs, signal });
+    return await parseDiarizationTask(task, { apiKey: config.asrApiKey, timeoutMs: config.aiTimeoutMs, signal });
   } finally {
     removeTempAudio(token);
     await rm(audioPath, { force: true }).catch(() => undefined);
@@ -210,6 +202,65 @@ export async function requestSegmentSubtitle({
     return [{ startMs: segment.startMs, endMs: segment.endMs, text }];
   }
   return groupWordsToSubtitles(words);
+}
+
+// OpenAI-compatible transcription adapter. Groq and OpenAI both expose
+// /audio/transcriptions and return second-based segment timestamps in verbose_json.
+// Koma already splits audio into small MP3 files, so the same adapter also works
+// with providers that enforce a per-file upload limit.
+export async function requestOpenAICompatibleSubtitle({
+  segment,
+  apiKey,
+  baseUrl,
+  model,
+  maxBytes = 8 * 1024 * 1024,
+  timeoutMs = 120000,
+  fetchImpl = fetch,
+  signal
+}: {
+  segment: AudioSegment;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  maxBytes?: number;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+}): Promise<TranscriptLine[]> {
+  const audio = await readFile(segment.path);
+  if (audio.byteLength > maxBytes) {
+    throw new Error(`音频切片超过 ${Math.round(maxBytes / 1024 / 1024)} MB，请缩短 ASR_SEGMENT_SECONDS。`);
+  }
+
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(audio)], { type: "audio/mpeg" }), basename(segment.path));
+  form.append("model", model);
+  form.append("response_format", "verbose_json");
+  form.append("timestamp_granularities[]", "segment");
+  form.append("temperature", "0");
+
+  const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/audio/transcriptions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
+  });
+  const body = await response.json().catch(() => ({})) as OpenAITranscriptionResponse;
+  if (!response.ok) {
+    throw new Error(body.error?.message || body.message || `听写模型请求失败：${response.status}`);
+  }
+
+  const lines = (Array.isArray(body.segments) ? body.segments : [])
+    .map((item) => ({
+      startMs: Math.max(0, Math.round((Number(item.start) || 0) * 1000)),
+      endMs: Math.max(0, Math.round((Number(item.end) || 0) * 1000)),
+      text: compactTranscriptText(String(item.text || ""))
+    }))
+    .filter((line) => line.text);
+  if (lines.length) return lines;
+
+  const text = compactTranscriptText(body.text || "");
+  return text ? [{ startMs: 0, endMs: Math.max(0, segment.endMs - segment.startMs), text }] : [];
 }
 
 async function submitAsrTask({ fileUrl, apiKey, baseUrl, model, timeoutMs, fetchImpl = fetch, signal }: {
@@ -348,6 +399,13 @@ interface FunAsrSyncResponse {
   };
   message?: string;
   code?: string;
+}
+
+interface OpenAITranscriptionResponse {
+  text?: string;
+  segments?: Array<{ start?: number; end?: number; text?: string }>;
+  error?: { message?: string };
+  message?: string;
 }
 
 interface AsrTaskResponse {

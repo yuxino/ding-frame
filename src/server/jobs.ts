@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import type { TranscriptLine } from "./types.js";
+import type { AnalysisSpec } from "./analysis-spec.js";
 export type { TranscriptLine };
 
 export interface Frame {
@@ -36,6 +37,8 @@ export interface AnalysisResult {
   transcript: TranscriptLine[];
   hasSubtitles?: boolean;
   frames: Frame[];
+  /** 用户按分析要求提取出的任意 JSON；默认通用总结任务不返回。 */
+  extractedData?: unknown;
 }
 
 export interface JobProgress {
@@ -60,13 +63,15 @@ export interface Job {
   inputMimeType?: string;
   /** 分析结果的语言：标题、总结、标签等 AI 生成文案按此语言输出。 */
   language: "en" | "zh";
+  /** 可选的自定义分析要求与期望 JSON 结构。 */
+  analysisSpec: AnalysisSpec;
 }
 
 const jobs = new Map<string, Job>();
 // 每个任务的取消信号：purgeJob 或到期清理时触发，让正在跑的管线尽快停下来。
 const abortControllers = new Map<string, AbortController>();
 
-export async function createJob({ source, title, language = "zh" }: { source: Job["source"]; title: string; language?: "en" | "zh" }): Promise<Job> {
+export async function createJob({ source, title, language = "zh", analysisSpec = {} }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec }): Promise<Job> {
   const id = randomUUID();
   const dir = join(config.tempRoot, `koma-${id}`);
   await mkdir(dir, { recursive: true });
@@ -82,7 +87,8 @@ export async function createJob({ source, title, language = "zh" }: { source: Jo
     progress: { stage: "queued", percent: 4, detail: "视频已经放入临时空间。" },
     result: null,
     error: null,
-    language
+    language,
+    analysisSpec
   };
   jobs.set(id, job);
   abortControllers.set(id, new AbortController());
@@ -121,6 +127,7 @@ export function serializeJob(job: Job | undefined) {
     expiresAt: job.expiresAt,
     status: job.status,
     progress: job.progress,
+    analysisSpec: job.analysisSpec,
     result,
     error: job.error
   };
