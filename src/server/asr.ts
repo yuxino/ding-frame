@@ -5,6 +5,8 @@ import { config } from "./config.js";
 import { registerTempAudio, removeTempAudio } from "./temp-audio.js";
 import { extractFullAudio } from "./video.js";
 import type { AudioSegment, TranscriptLine } from "./types.js";
+import { getRuntimeProviders, type RuntimeProvider } from "./provider-runtime.js";
+import type { AsrProvider } from "./config.js";
 
 // 字幕级听写走同步 Fun-ASR-Flash（base64 直传，无需公网地址），
 // 返回词级时间戳后按标点/停顿聚合为字幕行。
@@ -62,16 +64,18 @@ export async function transcribeFullAudio({
   audioDir,
   publicBaseUrl,
   fetchImpl = fetch,
-  signal
+  signal,
+  providerConfig = getRuntimeProviders().asr
 }: {
   inputPath: string;
   audioDir: string;
   publicBaseUrl: string;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
+  providerConfig?: RuntimeProvider<AsrProvider>;
 }): Promise<TranscriptLine[]> {
-  if (config.asrProvider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${config.asrProvider}`);
-  if (!config.asrApiKey) throw new Error("配置 DASHSCOPE_API_KEY 后才能使用说话人分离。");
+  if (providerConfig.provider !== "dashscope") throw new Error(`未知的 ASR_PROVIDER：${providerConfig.provider}`);
+  if (!providerConfig.apiKey) throw new Error("配置 DashScope API Key 后才能使用说话人分离。");
   if (!publicBaseUrl) throw new Error("说话人分离需要配置 PUBLIC_BASE_URL（服务的公网地址）。");
 
   const audioPath = join(audioDir, `diarization-${randomUUID()}.mp3`);
@@ -81,8 +85,8 @@ export async function transcribeFullAudio({
   try {
     const taskId = await submitAsrTask({
       fileUrl,
-      apiKey: config.asrApiKey,
-      baseUrl: config.asrBaseUrl,
+      apiKey: providerConfig.apiKey,
+      baseUrl: providerConfig.baseUrl,
       model: asyncAsrModel,
       timeoutMs: config.aiTimeoutMs,
       fetchImpl,
@@ -90,12 +94,12 @@ export async function transcribeFullAudio({
     });
     const task = await pollAsrTask({
       taskId,
-      apiKey: config.asrApiKey,
-      baseUrl: config.asrBaseUrl,
+      apiKey: providerConfig.apiKey,
+      baseUrl: providerConfig.baseUrl,
       timeoutMs: Math.max(120_000, config.aiTimeoutMs * 3),
       signal
     });
-    return await parseDiarizationTask(task, { apiKey: config.asrApiKey, timeoutMs: config.aiTimeoutMs, signal });
+    return await parseDiarizationTask(task, { apiKey: providerConfig.apiKey, timeoutMs: config.aiTimeoutMs, signal });
   } finally {
     removeTempAudio(token);
     await rm(audioPath, { force: true }).catch(() => undefined);

@@ -53,8 +53,9 @@ OPENROUTER_API_KEY=...
 
 - 视频最长 3 分钟；
 - 单 IP 每个 UTC 日 3 次；
-- 同时只分析 1 个任务；
-- 结果 10 分钟后清理。
+- 同时只分析 1 个任务。
+
+结果会永久保留，管理员应定期在 `/admin` 查看存储占用并删除不需要的演示任务。
 
 内置限流适合单机演示，多实例部署应在网关或共享存储中统一限流。nginx 后设置 `TRUST_PROXY=true` 前，必须确认代理会覆盖客户端伪造的 `X-Forwarded-For`。
 
@@ -128,11 +129,47 @@ VISION_MODEL=vision-model
 | `VISION_MAX_TOKENS` | `2000` | 视觉模型输出上限 |
 | `ARTIFACT_MAX_TOKENS` | `6000` | 显式请求文件产物时的模型输出上限；普通总结仍使用上面的较小值 |
 | `MAX_CONCURRENT_JOBS` | `2` | 同时分析的任务数 |
-| `RESULT_TTL_SECONDS` | `1200` | 结果保留时间 |
 | `DEMO_REQUESTS_PER_IP_PER_DAY` | `0` | 单机按 IP 的每日提交上限；0 为关闭 |
 | `TRUST_PROXY` | `false` | 是否信任反向代理提供的来源 IP |
 
 旧版 `ANALYSIS_PROVIDER=openai-compatible` 仍可使用，但新配置应改用 `VISION_PROVIDER`。
+
+## 管理平台与数据库
+
+配置 `ADMIN_PASSWORD` 后可访问 `/admin`，在页面中修改 Provider、模型、Base URL 和 API Key。API Key 会先用 AES-256-GCM 加密再写入数据库，浏览器只会收到末四位掩码。建议额外配置稳定、随机的 `KOMA_CONFIG_SECRET`；如果省略则回退使用 `ADMIN_PASSWORD` 作为加密密钥。
+
+本地默认使用 `DB_DRIVER=sqlite` 和 `./data/koma.sqlite`。线上可使用独立 MySQL 数据库：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `ADMIN_PASSWORD` | 空 | 为空时完全禁用管理后台 |
+| `KOMA_CONFIG_SECRET` | `ADMIN_PASSWORD` | Provider 配置加密密钥，推荐单独设置 |
+| `DB_DRIVER` | `sqlite` | `sqlite` 或 `mysql` |
+| `KOMA_DATABASE_PATH` | `./data/koma.sqlite` | SQLite 文件路径 |
+| `DB_HOST` | 空 | MySQL 地址；不应写入公开仓库 |
+| `DB_PORT` | `3306` | MySQL 端口 |
+| `DB_USER` / `DB_PASSWORD` | 空 | 建议使用只拥有 `koma.*` 权限的独立账号 |
+| `DB_NAME` | `koma` | MySQL 数据库名 |
+| `DB_SSL` | `false` | 是否要求 TLS 连接 |
+| `DB_CONNECTION_LIMIT` | `5` | MySQL 连接池大小 |
+| `DB_AUTO_CREATE` | `true` | 启动时创建 `DB_NAME`；使用预创建的最小权限数据库时设为 `false` |
+
+数据库保存 Provider 密文和完整 JSON 回看记录；视频、关键帧和生成文件只以对象 Key 建立索引，不把二进制内容写进数据库。完整部署方法见 [管理平台](ADMIN.zh-CN.md)。
+
+## 持久化存储
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `STORAGE_DRIVER` | `local` | `local` 或 `oss` |
+| `LOCAL_STORAGE_PATH` | `./data/storage` | 本地持久对象目录 |
+| `OSS_REGION` | 空 | 阿里云 OSS 区域 |
+| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | 空 | 仅服务端使用的 OSS 凭证 |
+| `OSS_BUCKET` | 空 | OSS Bucket |
+| `OSS_UPLOAD_PREFIX` | `koma` | 独立命名空间；任务位于 `koma/jobs/<id>/` |
+| `OSS_PUBLIC_BASE_URL` | 空 | 可选的可信公开/CDN 地址；为空时使用签名 URL |
+| `OSS_SIGNED_URL_SECONDS` | `900` | 签名回看地址有效期，最多一小时 |
+
+公开任务链接永久有效且只读，只有 `/admin` 可以永久删除任务及其整个存储目录。
 
 ## 处理流程
 
@@ -140,7 +177,7 @@ VISION_MODEL=vision-model
 2. 使用 FFmpeg 抽取代表性画面。
 3. 使用所选 ASR Provider 转写音频。
 4. 使用所选视觉 Provider 分析关键帧和字幕。
-5. 删除中间音频，并在 TTL 到期后清理临时数据。
+5. 保存原视频、关键帧和生成文件，写入完整结果记录，再删除中间音频和工作目录。
 
 ## 支持站点
 

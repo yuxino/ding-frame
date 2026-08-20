@@ -24,10 +24,24 @@ Add these under **Settings → Secrets and variables → Actions**:
 | `VISION_MODEL` | Optional provider-model override |
 | `PUBLIC_BASE_URL` | Optional public URL for speaker diarization |
 | `DEMO_REQUESTS_PER_IP_PER_DAY` | Optional public-demo daily allowance, such as `3` |
+| `ADMIN_PASSWORD` | Enables the protected `/admin` console; use a long random value |
+| `KOMA_CONFIG_SECRET` | Stable random secret used to encrypt provider keys |
+| `DB_DRIVER` | `mysql` in production, or leave empty for local SQLite |
+| `DB_HOST` / `DB_PORT` | MySQL endpoint and port; keep the real endpoint in Secrets |
+| `DB_USER` / `DB_PASSWORD` | MySQL account; use a dedicated account limited to `koma.*` after initial setup |
+| `DB_NAME` | `koma` |
+| `DB_SSL` | `true` when the database requires TLS |
+| `DB_AUTO_CREATE` | `true` for first boot with a privileged account; `false` after pre-provisioning |
+| `STORAGE_DRIVER` | `oss` for production |
+| `OSS_REGION` | Existing Aliyun OSS region |
+| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | Existing OSS credentials, stored only as Secrets |
+| `OSS_BUCKET` | Existing bucket |
+| `OSS_UPLOAD_PREFIX` | `koma` keeps this project in its own folder |
+| `OSS_PUBLIC_BASE_URL` | Optional public/CDN base URL; omit for private signed URLs |
 
 ## Server Setup
 
-Install Node.js 20+ (22 recommended), PM2, and nginx.
+Install Node.js 22.13+, PM2, and nginx.
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -83,4 +97,4 @@ pm2 status
 pm2 logs koma
 ```
 
-Tasks are stored in memory, so active jobs disappear after a service restart. Upload size, video duration, and result retention can be changed through environment variables; see [Configuration](docs/CONFIGURATION.md).
+Completed tasks survive service restarts: MySQL/SQLite stores complete replay records, while OSS/local storage keeps the source video, frames, and generated files under `koma/jobs/<id>/`. In-flight tasks are marked failed after a restart and can be resubmitted; they are not silently shown as running forever. See [Administration](docs/ADMIN.md) and [Configuration](docs/CONFIGURATION.md).

@@ -21,12 +21,14 @@
 - **按要求提取** — 输入自然语言分析要求，并可指定 JSON 示例或 JSON Schema；网页可复制/下载结果，API 可直接返回提取出的 JSON。
 - **文件产物** — 同一次分析可生成 JSON、CSV、Markdown、SRT 或 TXT，结果页直接下载；语言与具体内容由分析要求决定。
 - **多模型后端** — 内置百炼、OpenAI、Gemini、OpenRouter 和 Groq 预设，也可以接入任意兼容 OpenAI API 的视觉或听写服务。
+- **受保护的管理平台** — 在 `/admin` 管理 ASR/视觉 Provider、加密 API Key、永久任务与存储资产；运行中的任务始终使用创建时的配置快照。
+- **永久回看** — 每次提交都会得到不可猜的 `/jobs/<id>` 链接；SQLite/MySQL 保存完整任务与结果，本地存储或阿里云 OSS 保存原视频、关键帧和生成文件。
 - **智能下载** — 分享链接先解析成真实地址再下载；超长视频在下载前就被拒绝，不用白等整段拉完。
-- **临时处理** — 视频和分析数据在 TTL 到期后自动清理。
+- **仅管理员删除** — 公开回看链接只读；永久删除会同时移除数据库记录和该任务的整个存储目录。
 
 ## 快速开始
 
-需要 Node.js 20+，FFmpeg 已通过 `ffmpeg-static` 内置。
+需要 Node.js 22.13+，FFmpeg 已通过 `ffmpeg-static` 内置。
 
 ```bash
 npm install
@@ -59,6 +61,7 @@ node dist-server/cli.js demo.mp4 \
 ## 文档
 
 - [配置](docs/CONFIGURATION.zh-CN.md) — 环境变量说明
+- [管理平台](docs/ADMIN.zh-CN.md) — Provider 管理、数据库与 Secret 配置
 - [HTTP API](docs/API.zh-CN.md) — 提交任务与读取结构化结果
 - [部署](DEPLOY.md) — PM2 + nginx 部署
 - [设计决策](docs/decisions/)

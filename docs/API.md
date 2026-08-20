@@ -20,7 +20,7 @@ curl -X POST http://localhost:3000/api/analyze/url \
   }'
 ```
 
-The endpoint responds with `202`:
+The endpoint responds with `202`. The ID also forms the permanent, unguessable replay route `/jobs/JOB_ID`:
 
 ```json
 { "jobId": "..." }
@@ -52,7 +52,7 @@ When the job is done, `result.extractedData` contains the requested data. To ret
 curl http://localhost:3000/api/jobs/JOB_ID/extraction
 ```
 
-This endpoint returns `extractedData` exactly. It returns `409` while the job is running, `404` when custom extraction was not requested, and `404` after the job expires.
+This endpoint returns `extractedData` exactly. It returns `409` while the job is running and `404` when custom extraction was not requested or an administrator deleted the job.
 
 ## Download generated files
 
@@ -68,4 +68,23 @@ This endpoint returns `extractedData` exactly. It returns `409` while the job is
 }
 ```
 
-Fetch `downloadUrl` to download the file. Artifacts expire with the job TTL. Koma currently generates text artifacts only; model-supplied base64 and binary files are not accepted.
+Fetch `downloadUrl` to download the persisted file. Video and frame URLs use the same read-only job API. Koma currently generates text artifacts only; model-supplied base64 and binary files are not accepted.
+
+Public job endpoints are read-only. `DELETE /api/jobs/:id` returns `405`; permanent deletion is restricted to the authenticated administration API.
+
+## Administration API
+
+Administration endpoints are intended for the same-origin `/admin` console. After `ADMIN_PASSWORD` is configured, `POST /api/admin/login` creates an HttpOnly session. Every administration write also requires `x-koma-admin: 1` as a CSRF guard.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/admin/session` | Check whether administration is enabled and authenticated |
+| `POST` | `/api/admin/login` | Sign in as administrator |
+| `DELETE` | `/api/admin/session` | Sign out |
+| `GET` | `/api/admin/settings` | Read redacted provider settings |
+| `PUT` | `/api/admin/settings` | Save providers, models, base URLs, and optional replacement keys |
+| `POST` | `/api/admin/settings/reset` | Restore provider settings from server environment variables |
+| `GET` | `/api/admin/jobs` | Read up to 200 persistent jobs |
+| `DELETE` | `/api/admin/jobs/:id` | Stop a job and permanently remove its database row and storage prefix |
+
+Settings responses never include plaintext API keys; they only expose `keyConfigured` and a last-four-character `keyHint` such as `••••1234`.

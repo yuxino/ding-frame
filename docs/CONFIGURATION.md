@@ -49,7 +49,7 @@ This combination uses:
 - [Groq Speech to Text](https://console.groq.com/docs/speech-to-text) for multilingual Whisper transcription with segment timestamps. Koma's audio chunks stay below Groq's 25 MB free-tier per-file limit.
 - [OpenRouter Free Models Router](https://openrouter.ai/openrouter/free), which selects a currently available free model capable of image input.
 
-Free services still require account keys; there is no dependable anonymous, unlimited AI endpoint. Keys stay on the Koma server and never reach the browser. Because account-level quotas are limited, the demo template defaults to three-minute videos, three submissions per IP per UTC day, one concurrent job, and a ten-minute result TTL.
+Free services still require account keys; there is no dependable anonymous, unlimited AI endpoint. Keys stay on the Koma server and never reach the browser. Because account-level quotas are limited, the demo template defaults to three-minute videos, three submissions per IP per UTC day, and one concurrent job. Results are persistent, so administrators should review storage usage and delete unwanted demos from `/admin`.
 
 The built-in rate limiter is intended for a single-node demo. Multi-instance deployments should rate-limit at the gateway or in shared storage. Before setting `TRUST_PROXY=true` behind nginx, make sure the proxy overwrites client-supplied `X-Forwarded-For`.
 
@@ -123,11 +123,47 @@ Vision services must support `POST /chat/completions` and `image_url`. Transcrip
 | `VISION_MAX_TOKENS` | `2000` | Vision output limit |
 | `ARTIFACT_MAX_TOKENS` | `6000` | Vision output limit when file artifacts are explicitly requested; ordinary summaries keep the smaller limit above |
 | `MAX_CONCURRENT_JOBS` | `2` | Concurrent analysis jobs |
-| `RESULT_TTL_SECONDS` | `1200` | Result retention time |
 | `DEMO_REQUESTS_PER_IP_PER_DAY` | `0` | Single-node daily submissions per IP; 0 disables it |
 | `TRUST_PROXY` | `false` | Trust the reverse proxy's client IP |
 
 Legacy `ANALYSIS_PROVIDER=openai-compatible` remains accepted, but new deployments should use `VISION_PROVIDER`.
+
+## Administration and database
+
+Set `ADMIN_PASSWORD` to enable `/admin`, where an administrator can change providers, models, base URLs, and API keys. Keys are encrypted with AES-256-GCM before being written to the database; the browser only receives a last-four-character hint. Set a separate stable random `KOMA_CONFIG_SECRET`; when omitted, Koma falls back to `ADMIN_PASSWORD` as the encryption key.
+
+Local development uses `DB_DRIVER=sqlite` and `./data/koma.sqlite` by default. Production can use a dedicated MySQL database:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ADMIN_PASSWORD` | empty | The admin console is disabled when empty |
+| `KOMA_CONFIG_SECRET` | `ADMIN_PASSWORD` | Provider-settings encryption secret; set it separately in production |
+| `DB_DRIVER` | `sqlite` | `sqlite` or `mysql` |
+| `KOMA_DATABASE_PATH` | `./data/koma.sqlite` | SQLite file path |
+| `DB_HOST` | empty | MySQL host; never commit a real value |
+| `DB_PORT` | `3306` | MySQL port |
+| `DB_USER` / `DB_PASSWORD` | empty | Use a dedicated account limited to `koma.*` |
+| `DB_NAME` | `koma` | MySQL database name |
+| `DB_SSL` | `false` | Require TLS for the database connection |
+| `DB_CONNECTION_LIMIT` | `5` | MySQL connection-pool size |
+| `DB_AUTO_CREATE` | `true` | Create `DB_NAME` on startup; set false for a pre-provisioned least-privilege database |
+
+The database stores encrypted provider settings and complete JSON replay records. It stores object keys, not binary video/frame/file bodies. See [Administration](ADMIN.md) for deployment details.
+
+## Persistent storage
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `STORAGE_DRIVER` | `local` | `local` or `oss` |
+| `LOCAL_STORAGE_PATH` | `./data/storage` | Persistent local object root |
+| `OSS_REGION` | empty | Aliyun OSS region |
+| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | empty | Server-only OSS credentials |
+| `OSS_BUCKET` | empty | OSS bucket |
+| `OSS_UPLOAD_PREFIX` | `koma` | Namespace; jobs use `koma/jobs/<id>/` |
+| `OSS_PUBLIC_BASE_URL` | empty | Optional trusted public/CDN base URL; otherwise signed URLs are used |
+| `OSS_SIGNED_URL_SECONDS` | `900` | Signed replay URL lifetime, capped at one hour |
+
+Public job links are permanent and read-only. Only `/admin` can permanently delete a task and its complete storage prefix.
 
 ## Processing pipeline
 
@@ -135,7 +171,7 @@ Legacy `ANALYSIS_PROVIDER=openai-compatible` remains accepted, but new deploymen
 2. Use FFmpeg to extract representative frames.
 3. Transcribe audio with the selected ASR provider.
 4. Analyze key frames and subtitles with the selected vision provider.
-5. Delete intermediate audio and remove temporary data after the configured TTL.
+5. Store the source video, frames, and generated files; persist the complete result record; then delete intermediate audio and the working directory.
 
 ## Supported sites
 

@@ -4,7 +4,7 @@ import "dotenv/config";
 export type AsrProvider = "mock" | "dashscope" | "groq" | "openai" | "openai-compatible";
 export type VisionProvider = "mock" | "dashscope" | "openai" | "gemini" | "openrouter" | "groq" | "openai-compatible";
 
-interface ProviderPreset {
+export interface ProviderPreset {
   baseUrl: string;
   model: string;
   keyEnv: string;
@@ -143,14 +143,13 @@ export const config = {
   frameWidth: integerEnv("FRAME_WIDTH", 1280),
   frameSceneThreshold: floatEnv("FRAME_SCENE_THRESHOLD", 0.4, 0.05, 0.95),
   maxFrames: integerEnv("MAX_FRAMES", 18),
-  // Groq 的当前视觉模型单次最多接收 5 张图；其他兼容服务默认 10 张。
-  visionMaxFrames: requestedVisionProvider === "groq" ? Math.min(integerEnv("VISION_MAX_FRAMES", 5), 5) : integerEnv("VISION_MAX_FRAMES", 10),
+  // Provider 自身的图片数量限制在发起请求时按实际任务快照处理。
+  visionMaxFrames: integerEnv("VISION_MAX_FRAMES", 10),
   visionTranscriptChars: integerEnv("VISION_TRANSCRIPT_CHARS", 30000),
   visionMaxTokens: integerEnv("VISION_MAX_TOKENS", 2000),
   // File artifacts need more room than the summary JSON; only used when formats are explicitly requested.
   artifactMaxTokens: integerEnv("ARTIFACT_MAX_TOKENS", 6000),
   maxConcurrentJobs: integerEnv("MAX_CONCURRENT_JOBS", 2),
-  resultTtlSeconds: integerEnv("RESULT_TTL_SECONDS", 20 * 60),
   tempRoot: process.env.TEMP_ROOT || os.tmpdir(),
   asrProvider: resolveProvider(requestedAsrProvider, Boolean(asrApiKey)) as AsrProvider,
   visionProvider: resolveProvider(requestedVisionProvider, Boolean(visionApiKey)) as VisionProvider,

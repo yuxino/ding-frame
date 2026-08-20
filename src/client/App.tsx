@@ -17,10 +17,13 @@ const copy = {
       extracting_audio: "Preparing audio",
       transcribing: "Transcribing",
       interpreting: "Generating summary",
+      storing_video: "Saving video",
+      storing_results: "Saving results",
       done: "Complete",
       failed: "Try again"
     } as Record<string, string>,
     help: "How it works",
+    admin: "Manage",
     badge: "AI VIDEO UNDERSTANDING",
     hero: "Understand a video from the moments that matter.",
     intro: "Drop in a video. Koma builds a jumpable timeline, or follows your own request to extract structured data and downloadable files.",
@@ -28,8 +31,8 @@ const copy = {
     keyFramesSub: "See what matters",
     subtitles: "Subtitles",
     subtitlesSub: "Find exact moments",
-    cleanup: "Auto cleanup",
-    cleanupSub: "Nothing kept long-term",
+    cleanup: "Replayable",
+    cleanupSub: "Return with a private link",
     newAnalysis: "NEW ANALYSIS",
     startOne: "Start an analysis",
     sourceLabel: "Video source",
@@ -40,7 +43,7 @@ const copy = {
     publicUrl: "Public video URL",
     urlPlaceholder: "https://v.douyin.com/… or a direct video URL",
     urlHint: "Supports Douyin share links, Bilibili, YouTube and other public video URLs.",
-    temporary: "Stored only while processing",
+    temporary: "Saved for permanent replay",
     customExtract: "Custom extraction",
     customHint: "Ask for specific data, JSON, subtitles, reports, or downloadable files",
     analysisRequirement: "Analysis requirement",
@@ -59,7 +62,7 @@ const copy = {
     missingFile: "Choose a video first.",
     missingUrl: "Paste a video URL first.",
     startFailed: "Could not start the analysis.",
-    jobMissing: "This analysis is no longer available.",
+    jobMissing: "This analysis could not be found.",
     analyzingRemote: "ANALYZING · REMOTE VIDEO",
     analyzingLocal: "ANALYZING · LOCAL VIDEO",
     progressTitle: "Turning this video into something you can scan.",
@@ -69,11 +72,12 @@ const copy = {
     entered: "Video received",
     mediaAnalysis: "Analyzing audio and visuals",
     readableResult: "Building the result",
-    cancel: "Cancel and clear",
+    cancel: "Back home (keep running)",
     completed: "ANALYSIS COMPLETE",
     resultFallback: "What is worth remembering from this video?",
     restart: "Start over",
-    clear: "Clear",
+    clear: "Copy replay link",
+    linkCopied: "Link copied",
     aiSummary: "AI SUMMARY",
     structuredData: "REQUESTED DATA",
     structuredDataSub: "Returned in the JSON shape you requested",
@@ -86,7 +90,8 @@ const copy = {
     duration: "Duration",
     frames: "Key frames",
     subtitleLines: "Subtitle lines",
-    autoDelete: "Auto delete",
+    autoDelete: "Replay",
+    replayReady: "Saved",
     contentTags: "Content tags",
     jumpTag: "Click to jump to the first appearance",
     browserNoVideo: "Your browser cannot play this video.",
@@ -116,10 +121,10 @@ const copy = {
     subtitlePanelText: "One line at a time. Click any subtitle to jump back to it.",
     playFrom: "Play from",
     noSpeech: "No usable speech was detected in this video.",
-    remaining: "minutes until automatic cleanup",
+    remaining: "Permanent replay link · deletion is managed by the administrator",
     close: "Close",
     aboutTitle: "AI video understanding, without the clutter.",
-    aboutText: "Koma temporarily stores the video while extracting frames, transcribing audio, and letting you review the result. Intermediate audio is deleted after analysis; the video, frames, and result disappear when the timer ends or when you clear them.",
+    aboutText: "Koma deletes intermediate audio after analysis, then keeps the source video, key frames, result, and generated files for replay. Anyone with the unguessable result link can view it; only the administrator can permanently delete it.",
     aboutMuted: "Configure any supported ASR and vision providers for real analysis. Without model keys, Koma runs the default summary flow with demo data; custom extraction needs a real vision model.",
     gotIt: "Got it",
     language: "中文"
@@ -134,10 +139,13 @@ const copy = {
       extracting_audio: "整理声音",
       transcribing: "听写字幕",
       interpreting: "生成总结",
+      storing_video: "保存视频",
+      storing_results: "保存结果",
       done: "分析完成",
       failed: "需要重试"
     } as Record<string, string>,
     help: "使用说明",
+    admin: "管理",
     badge: "AI 视频理解",
     hero: "从关键瞬间，看懂一段视频。",
     intro: "放入一段视频。Koma 可以整理可跳转的时间线，也可以按你的要求提取结构化数据并生成可下载文件。",
@@ -145,8 +153,8 @@ const copy = {
     keyFramesSub: "快速理解画面",
     subtitles: "逐句字幕",
     subtitlesSub: "准确定位内容",
-    cleanup: "自动清理",
-    cleanupSub: "不长期保存视频",
+    cleanup: "永久回看",
+    cleanupSub: "凭私密链接随时返回",
     newAnalysis: "NEW ANALYSIS",
     startOne: "开始一次分析",
     sourceLabel: "视频来源",
@@ -157,7 +165,7 @@ const copy = {
     publicUrl: "公开的视频地址",
     urlPlaceholder: "https://v.douyin.com/… 或视频直链",
     urlHint: "支持抖音分享链接、B站、YouTube 等公开链接与视频直链。",
-    temporary: "仅在分析期间暂存",
+    temporary: "保存为可永久回看的任务",
     customExtract: "自定义提取",
     customHint: "写下分析要求，可返回 JSON、字幕、报告或可下载文件",
     analysisRequirement: "分析要求",
@@ -176,7 +184,7 @@ const copy = {
     missingFile: "先放入一个小视频",
     missingUrl: "先粘贴一个视频地址",
     startFailed: "没有成功开始分析",
-    jobMissing: "任务已经消失了",
+    jobMissing: "找不到这次分析",
     analyzingRemote: "ANALYZING · REMOTE VIDEO",
     analyzingLocal: "ANALYZING · LOCAL VIDEO",
     progressTitle: "正在把视频整理成可读结果。",
@@ -186,11 +194,12 @@ const copy = {
     entered: "视频已进入临时空间",
     mediaAnalysis: "声音与画面分析",
     readableResult: "生成可读结果",
-    cancel: "取消并清除",
+    cancel: "返回首页（任务继续）",
     completed: "分析完成",
     resultFallback: "这段视频，留下了什么？",
     restart: "重新开始",
-    clear: "清除本次",
+    clear: "复制回看链接",
+    linkCopied: "链接已复制",
     aiSummary: "AI 视频总结",
     structuredData: "按要求提取的数据",
     structuredDataSub: "按你指定的 JSON 结构返回",
@@ -203,7 +212,8 @@ const copy = {
     duration: "视频时长",
     frames: "关键画面",
     subtitleLines: "字幕句数",
-    autoDelete: "自动清除",
+    autoDelete: "回看状态",
+    replayReady: "已保存",
     contentTags: "内容标签",
     jumpTag: "点击跳到首次出现的位置",
     browserNoVideo: "你的浏览器暂时无法播放这段视频。",
@@ -233,10 +243,10 @@ const copy = {
     subtitlePanelText: "每句一行，点击直接跳回对应位置。",
     playFrom: "从",
     noSpeech: "这段视频没有识别到可用人声。",
-    remaining: "分钟后自动清除",
+    remaining: "永久回看链接 · 仅管理员可以删除",
     close: "关闭",
     aboutTitle: "AI 视频理解工作台",
-    aboutText: "视频会暂存在服务端，用于抽帧、听写和回看。中间音频分析后立即删除；视频、关键帧和结果会在倒计时结束或你手动清除时一起删除。",
+    aboutText: "中间音频会在分析后立即删除；原视频、关键帧、结果和生成文件会持久保存。拿到不可猜结果链接的人可以回看，只有管理员能执行永久删除。",
     aboutMuted: "配置任意受支持的听写与视觉模型后即可使用真实分析；没有模型 Key 时可演示默认总结流程，自定义提取需要真实视觉模型。",
     gotIt: "知道了",
     language: "EN"
@@ -251,8 +261,8 @@ interface Tag { label: string; category: string; atMs: number; }
 type ArtifactFormat = "json" | "csv" | "markdown" | "srt" | "text";
 interface Artifact { id: string; name: string; format: ArtifactFormat; mimeType: string; language?: string; sizeBytes: number; downloadUrl: string; }
 interface AnalysisResult { title: string; durationMs: number; summary: string; tags: Tag[]; chapters: Chapter[]; transcript: TranscriptLine[]; hasSubtitles?: boolean; frames: Frame[]; videoUrl: string; extractedData?: unknown; artifacts?: Artifact[]; }
-interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; expiresAt: number; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; }
-interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number; resultTtlSeconds?: number }; }
+interface Job { id: string; source: "upload" | "url"; title: string; createdAt: number; updatedAt: number; completedAt?: number | null; status: "queued" | "processing" | "done" | "failed"; progress: JobProgress; analysisSpec?: { instruction?: string; outputSchema?: unknown; artifactFormats?: ArtifactFormat[] }; result: AnalysisResult | null; error: string | null; }
+interface ServiceInfo { limits?: { maxUploadBytes?: number; maxDurationSeconds?: number }; }
 
 function parseOutputSchema(value: string, errorMessage: string): unknown {
   const raw = value.trim();
@@ -270,7 +280,7 @@ function formatDate(timestamp: number, language: Language): string {
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
 }
 
-type GlyphName = "arrow" | "clock" | "frame" | "info" | "link" | "play" | "spark" | "trash" | "upload" | "voice" | "cc" | "zoom";
+type GlyphName = "arrow" | "clock" | "frame" | "info" | "link" | "play" | "spark" | "trash" | "upload" | "voice" | "cc" | "zoom" | "settings";
 function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
   const icons: Record<GlyphName, ReactNode> = {
     arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>, clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></>,
@@ -279,7 +289,8 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
     play: <path d="m9 7 8 5-8 5Z" />, spark: <><path d="m12 3 1.2 4.1a5 5 0 0 0 3.7 3.7L21 12l-4.1 1.2a5 5 0 0 0-3.7 3.7L12 21l-1.2-4.1a5 5 0 0 0-3.7-3.7L3 12l4.1-1.2a5 5 0 0 0 3.7-3.7Z" /></>,
     trash: <><path d="M4 7h16" /><path d="m9 7 1-3h4l1 3" /><path d="m6 7 1 13h10l1-13" /><path d="M10 11v5M14 11v5" /></>, upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4" /></>,
     voice: <><path d="M9 5v14" /><path d="M5 9v6" /><path d="M13 8v8" /><path d="M17 6v12" /><path d="M21 10v4" /></>, cc: <><rect x="2" y="6" width="20" height="12" rx="2.5" /><path d="M8.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /><path d="M15.6 10.2c-.5-.5-1.1-.7-1.7-.7-1.7 0-3 .9-3 2.5s1.3 2.5 3 2.5c.6 0 1.2-.2 1.7-.7" /></>,
-    zoom: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.2 4.2" /><path d="M10.8 7.8v6M7.8 10.8h6" /></>
+    zoom: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.2 4.2" /><path d="M10.8 7.8v6M7.8 10.8h6" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>
   };
   return <svg className="glyph" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[name]}</svg>;
 }
@@ -312,9 +323,8 @@ function App() {
   const progress = job?.progress?.percent ?? 0;
   const maxMinutes = Math.max(1, Math.round((serviceInfo?.limits?.maxDurationSeconds || 15 * 60) / 60));
   const maxMegabytes = Math.max(1, Math.round((serviceInfo?.limits?.maxUploadBytes || 500 * 1024 * 1024) / 1024 / 1024));
-  const ttlMinutes = Math.max(1, Math.round((serviceInfo?.limits?.resultTtlSeconds || 20 * 60) / 60));
   const fileHint = language === "zh" ? `MP4、MOV、WebM · 最长 ${maxMinutes} 分钟 / ${maxMegabytes} MB` : `MP4, MOV, WebM · up to ${maxMinutes} min / ${maxMegabytes} MB`;
-  const privacy = language === "zh" ? `${ttlMinutes} 分钟后自动消失` : `Auto-deletes after ${ttlMinutes} minutes`;
+  const privacy = language === "zh" ? "永久回看 · 管理员可删除" : "Permanent replay · Admin deletion";
 
   useEffect(() => {
     window.localStorage.setItem("koma-language", language);
@@ -332,12 +342,27 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const match = window.location.pathname.match(/^\/jobs\/([a-f0-9-]{20,64})\/?$/i);
+    if (!match) return undefined;
+    const controller = new AbortController();
+    setBusy(true);
+    fetch(`/api/jobs/${match[1]}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(response.status === 404 ? t.jobMissing : t.startFailed);
+        setJob(await response.json() as Job);
+      })
+      .catch((cause) => { if (!controller.signal.aborted) setError(translateServerError(cause instanceof Error ? cause.message : String(cause), language)); })
+      .finally(() => { if (!controller.signal.aborted) setBusy(false); });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
     if (!job?.id || job.status === "done" || job.status === "failed") return undefined;
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" });
         if (response.status === 404) {
-          // 任务已过期或被清除：停止轮询，标记为失败而不是每 1.2 秒重复报错。
+          // 管理员可能删除任务：停止轮询，标记为失败而不是重复请求。
           setJob((current) => current ? { ...current, status: "failed", error: t.jobMissing } : current);
           return;
         }
@@ -357,6 +382,7 @@ function App() {
         const jobId = await uploadWithProgress(file, parsedOutputSchema);
         const jobResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
         setJob(await jobResponse.json() as Job);
+        window.history.replaceState({}, "", `/jobs/${jobId}`);
       } else {
         if (!url.trim()) throw new Error(t.missingUrl);
         const response = await fetch("/api/analyze/url", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: url.trim(), lang: language, instruction: instruction.trim() || undefined, outputSchema: parsedOutputSchema, artifactFormats }) });
@@ -364,6 +390,7 @@ function App() {
         if (!response.ok) throw new Error(body.error || t.startFailed);
         const jobResponse = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
         setJob(await jobResponse.json() as Job);
+        window.history.replaceState({}, "", `/jobs/${body.jobId}`);
       }
     } catch (submitError) {
       setError(translateServerError(submitError instanceof Error ? submitError.message : String(submitError), language));
@@ -401,8 +428,8 @@ function App() {
     await startAnalysis();
   }
 
-  async function purgeJob() { if (!job?.id) return; await fetch(`/api/jobs/${job.id}`, { method: "DELETE" }); setJob(null); setFile(null); setUrl(""); }
-  async function restartAnalysis() { await purgeJob(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function leaveJob() { setJob(null); setFile(null); setUrl(""); setError(""); window.history.pushState({}, "", "/"); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function restartAnalysis() { leaveJob(); }
   // 回到 landing 后把焦点放到 URL 输入框（结果页点“重新开始”时），
   // 用 effect 而不是 setTimeout 猜渲染时机。
   const wasInResult = useRef(false);
@@ -410,8 +437,8 @@ function App() {
     if (wasInResult.current && !job) urlInputRef.current?.focus();
     wasInResult.current = Boolean(job);
   }, [job]);
-  // 点 Logo 回到首页：清掉当前任务视图但不删除服务端数据（让它按 TTL 自然清理）。
-  function goHome() { setJob(null); setError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  // 点 Logo 回到首页只离开当前视图；永久任务继续处理并保留。
+  function goHome() { leaveJob(); }
   function selectFile(nextFile: File | undefined) { if (!nextFile) return; setFile(nextFile); setError(""); }
   function toggleArtifactFormat(format: ArtifactFormat) {
     setArtifactFormats((current) => current.includes(format) ? current.filter((item) => item !== format) : [...current, format]);
@@ -421,6 +448,7 @@ function App() {
     <header className="site-header"><div className="header-inner"><Brand onClick={job ? goHome : undefined} label={t.backHome} /><div className="header-actions">
       <span className="privacy-pill"><i />{privacy}</span>
       <button className="header-button" type="button" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>{t.language}</button>
+      <a className="header-button" href="/admin"><Glyph name="settings" size={16} />{t.admin}</a>
       <button className="header-button" type="button" onClick={() => setShowSettings(true)}><Glyph name="info" size={16} />{t.help}</button>
     </div></div></header>
 
@@ -460,8 +488,8 @@ function App() {
           {error && <p className="form-error" role="alert">{error}</p>}
         </form>
       </section>}
-      {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={purgeJob} onRetry={retryAnalysis} language={language} />}
-      {hasResult && <ResultView job={job} onClear={purgeJob} onRestart={restartAnalysis} language={language} />}
+      {job && !hasResult && <ProgressView job={job} progress={progress} error={error} onClear={leaveJob} onRetry={retryAnalysis} language={language} />}
+      {hasResult && <ResultView job={job} onRestart={restartAnalysis} language={language} />}
     </main>
     {showSettings && <InfoModal onClose={() => setShowSettings(false)} language={language} />}
   </div>;
@@ -481,10 +509,9 @@ function FitTitle({ children }: { children: ReactNode }) {
   return <h1 ref={ref}>{children}</h1>;
 }
 
-function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: () => void; onRestart: () => void; language: Language }) {
+function ResultView({ job, onRestart, language }: { job: Job; onRestart: () => void; language: Language }) {
   const t = copy[language]; const result = job.result as AnalysisResult;
-  const [remaining, setRemaining] = useState(Math.max(0, job.expiresAt - Date.now())); const [selectedFrame, setSelectedFrame] = useState(0); const [currentMs, setCurrentMs] = useState(0); const [showSubtitles, setShowSubtitles] = useState(false); const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => { const timer = window.setInterval(() => setRemaining(Math.max(0, job.expiresAt - Date.now())), 1000); return () => window.clearInterval(timer); }, [job.expiresAt]);
+  const [selectedFrame, setSelectedFrame] = useState(0); const [currentMs, setCurrentMs] = useState(0); const [showSubtitles, setShowSubtitles] = useState(false); const [linkCopied, setLinkCopied] = useState(false); const videoRef = useRef<HTMLVideoElement>(null);
   // 结果页让浏览器标签页显示视频标题
   useEffect(() => {
     const previous = document.title;
@@ -495,22 +522,22 @@ function ResultView({ job, onClear, onRestart, language }: { job: Job; onClear: 
   const [previewFrame, setPreviewFrame] = useState<Frame | null>(null);
   useEffect(() => { setShowSubtitles(!result.hasSubtitles); }, [result.hasSubtitles]);
   const activeSubtitle = showSubtitles ? (result.transcript || []).find((line) => currentMs >= line.startMs && currentMs < line.endMs) : null;
-  const countdown = `${Math.floor(remaining / 60000)}:${String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0")}`;
+  async function copyReplayLink() { await navigator.clipboard.writeText(window.location.href); setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1600); }
   function syncToTime(atMs: number, shouldPlay = true) { const targetMs = Math.min(result.durationMs || atMs, Math.max(0, Number(atMs) || 0)); const video = videoRef.current; const seek = () => { const element = videoRef.current; if (!element) return; element.currentTime = targetMs / 1000; if (shouldPlay) element.play().catch(() => undefined); }; if (video) { if (video.readyState >= 1) seek(); else video.addEventListener("loadedmetadata", seek, { once: true }); } setCurrentMs(targetMs); setSelectedFrame(frameIndexAtTime(result.frames, targetMs)); }
   function followPlayback() { const nextMs = Math.round((videoRef.current?.currentTime || 0) * 1000); setCurrentMs(nextMs); setSelectedFrame(frameIndexAtTime(result.frames, nextMs)); }
 
   return <section className="result-layout"><div className="result-main">
-    <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={onClear}><Glyph name="trash" size={16} />{t.clear}</button></div></div>
+    <div className="result-heading"><div className="result-title"><span className="page-label">{t.completed} · {formatDate(job.createdAt, language)}</span><FitTitle>{result.title || t.resultFallback}</FitTitle></div><div className="result-actions"><button className="restart-button" type="button" onClick={onRestart}><Glyph name="arrow" size={15} />{t.restart}</button><button className="clear-button" type="button" onClick={() => void copyReplayLink()}><Glyph name="link" size={16} />{linkCopied ? t.linkCopied : t.clear}</button></div></div>
     <div className="summary-block"><span><Glyph name="spark" size={15} />{t.aiSummary}</span><p>{result.summary}</p></div>
     {Object.prototype.hasOwnProperty.call(result, "extractedData") && <StructuredData data={result.extractedData} jobId={job.id} language={language} />}
     {result.artifacts?.length ? <ArtifactPanel artifacts={result.artifacts} language={language} /> : null}
-    <div className="stat-row"><div><span>{t.duration}</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>{t.frames}</span><strong>{result.frames.length}</strong></div><div><span>{t.subtitleLines}</span><strong>{result.transcript.length}</strong></div><div><span>{t.autoDelete}</span><strong className="countdown">{countdown}</strong></div></div>
+    <div className="stat-row"><div><span>{t.duration}</span><strong>{formatTime(result.durationMs)}</strong></div><div><span>{t.frames}</span><strong>{result.frames.length}</strong></div><div><span>{t.subtitleLines}</span><strong>{result.transcript.length}</strong></div><div><span>{t.autoDelete}</span><strong className="persistent-status">{t.replayReady}</strong></div></div>
     <section className="tag-panel"><div className="section-heading"><span>{t.contentTags}</span><small>{t.jumpTag}</small></div><div className="tag-list">{(result.tags || []).map((tag) => <button type="button" className="tag-chip" key={`${tag.category}-${tag.label}`} onClick={() => syncToTime(tag.atMs)}><span>{tag.category}</span>{tag.label}<i>{formatTime(tag.atMs)}</i></button>)}</div></section>
     <div className="video-stage"><div className="video-stage-player"><video ref={videoRef} src={result.videoUrl} poster={result.frames[0]?.url} controls playsInline preload="metadata" onTimeUpdate={followPlayback} onSeeked={followPlayback}>{t.browserNoVideo}</video>{activeSubtitle && <div className="video-subtitle">{activeSubtitle.speaker != null && String(activeSubtitle.speaker).trim() ? <span>{t.speaker} {activeSubtitle.speaker}</span> : null}<p>{activeSubtitle.text}</p></div>}<button type="button" className={`cc-toggle ${showSubtitles ? "on" : ""}`} aria-pressed={showSubtitles} onClick={() => setShowSubtitles((value) => !value)} title={showSubtitles ? t.subtitlesOn : t.subtitlesOff}><Glyph name="cc" size={13} />{t.subtitlesToggle}</button></div><div className="video-stage-caption"><span>{selected?.caption || t.reviewing}</span><span>{formatTime(currentMs)} / {formatTime(result.durationMs)}</span></div></div>
     <section className="keyframe-panel" aria-label={t.frameTimeline}><div className="section-heading"><span>{t.keyFrameGallery}</span><small>{t.keyFrameGallerySub}</small></div><div className="frame-gallery">{result.frames.map((frame, index) => <button key={frame.url} type="button" aria-label={`${t.jumpTo} ${formatTime(frame.atMs)}: ${frame.caption || t.keyFrame}`} className={index === selectedFrame ? "active" : ""} onClick={() => { syncToTime(frame.atMs, false); setPreviewFrame(frame); }}><span className="frame-gallery-image"><img src={frame.url} alt={frame.caption || t.keyFrame} /><i>{formatTime(frame.atMs)}</i><em><Glyph name="zoom" size={14} />{t.clickToEnlarge}</em></span><strong>{frame.caption || `${t.keyFrame} ${index + 1}`}</strong></button>)}</div></section>
     <section className="chapters"><div className="section-heading"><span>{t.chapters}</span><small>{result.chapters.length ? `${result.chapters.length} ${t.chaptersCount} · ${t.chaptersSub}` : ""}</small></div>{result.chapters.length ? <div className="chapter-list">{(result.chapters || []).map((chapter, index) => <button type="button" className="chapter" key={`${chapter.startMs}-${index}`} onClick={() => syncToTime(chapter.startMs)}><span className="chapter-rail"><strong>{index + 1}</strong><i>{formatTime(chapter.startMs)} – {formatTime(chapter.endMs)}</i></span><span className="chapter-body"><strong>{chapter.title}</strong><p>{chapter.summary}</p></span><Glyph name="arrow" size={18} /></button>)}</div> : <div className="chapter-empty">{t.noChapters}</div>}</section>
   </div>
-  <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="clock" size={14} />{Math.ceil(remaining / 60000)} {t.remaining}</div></aside>
+  <aside className="transcript-panel"><div className="panel-heading"><div><span className="page-label">SUBTITLES</span><h2>{t.subtitlePanel}</h2><p>{t.subtitlePanelText}</p></div><span className="live-dot" /></div><div className="transcript-list">{result.transcript.length ? result.transcript.map((line, index) => { const active = currentMs >= line.startMs && currentMs < line.endMs; const speaker = line.speaker != null && String(line.speaker).trim() ? `${t.speaker} ${line.speaker}` : t.voice; return <button type="button" className={`transcript-line ${active ? "active" : ""}`} aria-pressed={active} key={`${line.startMs}-${index}`} onClick={() => syncToTime(line.startMs)}><span className="line-rail"><strong>{formatTime(line.startMs)}</strong><i>{formatTime(line.endMs)}</i></span><span className="line-body"><small><i />{speaker}</small><p>{line.text}</p><em><Glyph name="play" size={11} />{t.playFrom} {formatTime(line.startMs)}</em></span></button>; }) : <div className="transcript-empty">{t.noSpeech}</div>}</div><div className="panel-note"><Glyph name="link" size={14} />{t.remaining}</div></aside>
   {previewFrame && <FramePreview frame={previewFrame} onClose={() => setPreviewFrame(null)} onPlay={() => { syncToTime(previewFrame.atMs); setPreviewFrame(null); }} onPrevious={() => { const index = result.frames.findIndex((frame) => frame.url === previewFrame.url); setPreviewFrame(result.frames[(index - 1 + result.frames.length) % result.frames.length]); }} onNext={() => { const index = result.frames.findIndex((frame) => frame.url === previewFrame.url); setPreviewFrame(result.frames[(index + 1) % result.frames.length]); }} language={language} />}
   </section>;
 }

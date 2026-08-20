@@ -5,8 +5,8 @@ import { isIP } from "node:net";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { analysisIsConfigured, asrIsConfigured, config } from "./config.js";
-import { createJob, getJob, purgeJob, serializeJob, updateJob, type Job } from "./jobs.js";
+import { config } from "./config.js";
+import { createJob, deleteJob, loadJob, serializeJob, updateJob, type Job } from "./jobs.js";
 import { getTempAudio } from "./temp-audio.js";
 import { enqueueAnalysis } from "./pipeline.js";
 import { streamToFile } from "./download.js";
@@ -16,24 +16,103 @@ import { parseByteRange } from "./video-stream.js";
 import { createDailyLimiter } from "./rate-limit.js";
 import { ARTIFACT_FORMATS, parseAnalysisSpec } from "./analysis-spec.js";
 import { contentDisposition } from "./artifacts.js";
+import {
+  adminAuthEnabled,
+  adminSessionCookie,
+  clearAdminSessionCookie,
+  createAdminSession,
+  isAdminSession,
+  revokeAdminSession
+} from "./admin-auth.js";
+import { databaseDriver, initializeDatabase, listJobHistory, markInterruptedJobs } from "./database.js";
+import { getRuntimeProviders, getSafeProviderSettings, initializeProviderSettings, resetProviderSettings, updateProviderSettings } from "./provider-runtime.js";
+import { initializeStorage, storageHealth, storedObjectInfo } from "./storage.js";
+
+await initializeDatabase();
+await markInterruptedJobs();
+await initializeStorage();
+await initializeProviderSettings();
 
 const app = Fastify({ logger: true, bodyLimit: config.maxUploadBytes + 1024 * 1024, trustProxy: config.trustProxy });
 const demoLimiter = createDailyLimiter(config.demoRequestsPerIpPerDay);
 await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes } });
 
-app.get("/api/health", async () => ({
-  ok: true,
-  service: "koma",
-  providers: { asr: config.asrProvider, vision: config.visionProvider },
-  asrProvider: config.asrProvider,
-  analysisProvider: config.visionProvider,
-  models: { asr: config.asrModel || null, vision: config.visionModel || null },
-  limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds, resultTtlSeconds: config.resultTtlSeconds },
-  features: { customExtraction: true, rawExtractionEndpoint: true, downloadableArtifacts: true, artifactFormats: ARTIFACT_FORMATS },
-  configured: { asr: asrIsConfigured(), vision: analysisIsConfigured(), analysis: analysisIsConfigured() },
-  demoLimitPerIpPerDay: config.demoRequestsPerIpPerDay || null,
-  mock: { asr: config.asrProvider === "mock", vision: config.visionProvider === "mock", analysis: config.visionProvider === "mock" }
-}));
+app.get("/api/health", async () => {
+  const providers = getRuntimeProviders();
+  const asrConfigured = providers.asr.provider !== "mock" && Boolean(providers.asr.apiKey);
+  const visionConfigured = providers.vision.provider !== "mock" && Boolean(providers.vision.apiKey);
+  return {
+    ok: true,
+    service: "koma",
+    providers: { asr: providers.asr.provider, vision: providers.vision.provider },
+    asrProvider: providers.asr.provider,
+    analysisProvider: providers.vision.provider,
+    models: { asr: providers.asr.model || null, vision: providers.vision.model || null },
+    limits: { maxUploadBytes: config.maxUploadBytes, maxDurationSeconds: config.maxDurationSeconds },
+    features: { customExtraction: true, rawExtractionEndpoint: true, downloadableArtifacts: true, permanentReplay: true, artifactFormats: ARTIFACT_FORMATS, admin: adminAuthEnabled() },
+    configured: { asr: asrConfigured, vision: visionConfigured, analysis: visionConfigured },
+    database: { driver: databaseDriver() },
+    storage: storageHealth(),
+    demoLimitPerIpPerDay: config.demoRequestsPerIpPerDay || null,
+    mock: { asr: providers.asr.provider === "mock", vision: providers.vision.provider === "mock", analysis: providers.vision.provider === "mock" }
+  };
+});
+
+app.get("/api/admin/session", async (request, reply) => {
+  return reply.header("cache-control", "no-store").send({ enabled: adminAuthEnabled(), authenticated: adminAuthEnabled() && isAdminSession(request.headers.cookie) });
+});
+
+app.post("/api/admin/login", async (request, reply) => {
+  if (!adminMutationHeader(request)) return reply.code(403).send({ error: "管理请求校验失败。" });
+  if (!adminAuthEnabled()) return reply.code(503).send({ error: "管理后台尚未启用，请先配置 ADMIN_PASSWORD。" });
+  try {
+    const token = createAdminSession((request.body as { password?: unknown } | undefined)?.password, request.ip);
+    if (!token) return reply.code(401).send({ error: "管理员密码不正确。" });
+    return reply.header("set-cookie", adminSessionCookie(token, request.protocol === "https")).header("cache-control", "no-store").send({ authenticated: true });
+  } catch (error) {
+    return reply.code(429).send({ error: messageOf(error) });
+  }
+});
+
+app.delete("/api/admin/session", async (request, reply) => {
+  if (!adminMutationHeader(request)) return reply.code(403).send({ error: "管理请求校验失败。" });
+  revokeAdminSession(request.headers.cookie);
+  return reply.header("set-cookie", clearAdminSessionCookie(request.protocol === "https")).code(204).send();
+});
+
+app.get("/api/admin/settings", async (request, reply) => {
+  if (!requireAdmin(request, reply)) return;
+  return reply.header("cache-control", "no-store").send(getSafeProviderSettings());
+});
+
+app.put("/api/admin/settings", async (request, reply) => {
+  if (!requireAdminMutation(request, reply)) return;
+  try {
+    return reply.header("cache-control", "no-store").send(await updateProviderSettings(request.body as Parameters<typeof updateProviderSettings>[0]));
+  } catch (error) {
+    return reply.code(400).send({ error: messageOf(error) });
+  }
+});
+
+app.post("/api/admin/settings/reset", async (request, reply) => {
+  if (!requireAdminMutation(request, reply)) return;
+  try {
+    return reply.header("cache-control", "no-store").send(await resetProviderSettings());
+  } catch (error) {
+    return reply.code(400).send({ error: messageOf(error) });
+  }
+});
+
+app.get("/api/admin/jobs", async (request, reply) => {
+  if (!requireAdmin(request, reply)) return;
+  return reply.header("cache-control", "no-store").send({ jobs: await listJobHistory(200) });
+});
+
+app.delete("/api/admin/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+  if (!requireAdminMutation(request, reply)) return;
+  await deleteJob(request.params.id);
+  return reply.code(204).send();
+});
 
 app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyReply) => {
   let job: Job | undefined;
@@ -57,7 +136,7 @@ app.post("/api/analyze/upload", async (request: FastifyRequest, reply: FastifyRe
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
-    if (job) await purgeJob(job.id);
+    if (job) await deleteJob(job.id);
     return reply.code(statusCodeOf(error) || 400).send({ error: messageOf(error) });
   }
 });
@@ -77,21 +156,21 @@ app.post("/api/analyze/url", async (request: FastifyRequest, reply: FastifyReply
     enqueueAnalysis(job);
     return reply.code(202).send({ jobId: job.id });
   } catch (error) {
-    if (job) await purgeJob(job.id);
+    if (job) await deleteJob(job.id);
     return reply.code(statusCodeOf(error) || 400).send({ error: messageOf(error) });
   }
 });
 
 app.get("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  const job = getJob(request.params.id);
-  if (!job) return reply.code(404).send({ error: "这次分析已经消失了。" });
+  const job = await loadJob(request.params.id);
+  if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
   return reply.header("cache-control", "no-store").send(serializeJob(job));
 });
 
 // Programmatic callers can fetch exactly the requested JSON value without Koma's summary wrapper.
 app.get("/api/jobs/:id/extraction", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  const job = getJob(request.params.id);
-  if (!job) return reply.code(404).send({ error: "这次分析已经消失了。" });
+  const job = await loadJob(request.params.id);
+  if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
   if (job.status !== "done" || !job.result) return reply.code(409).send({ error: "结构化提取还没有完成。" });
   if (!Object.prototype.hasOwnProperty.call(job.result, "extractedData")) {
     return reply.code(404).send({ error: "这次任务没有请求结构化提取。" });
@@ -100,37 +179,25 @@ app.get("/api/jobs/:id/extraction", async (request: FastifyRequest<{ Params: { i
 });
 
 app.get("/api/jobs/:id/artifacts/:artifactId", async (request: FastifyRequest<{ Params: { id: string; artifactId: string } }>, reply: FastifyReply) => {
-  const job = getJob(request.params.id);
-  if (!job) return reply.code(404).send({ error: "这次分析已经消失了。" });
+  const job = await loadJob(request.params.id);
+  if (!job) return reply.code(404).send({ error: "找不到这次分析。" });
   if (job.status !== "done" || !job.result) return reply.code(409).send({ error: "产物文件还没有生成完成。" });
   const artifact = job.result.artifacts?.find((item) => item.id === request.params.artifactId);
-  if (!artifact) return reply.code(404).send({ error: "找不到这个产物文件。" });
-  return reply
-    .header("cache-control", "no-store")
-    .header("content-disposition", contentDisposition(artifact.name))
-    .type(artifact.mimeType)
-    .send(artifact.content);
+  if (!artifact?.storageKey) return reply.code(404).send({ error: "找不到这个产物文件。" });
+  return sendStoredObject(request, reply, artifact.storageKey, artifact.mimeType, contentDisposition(artifact.name));
 });
 
 app.delete("/api/jobs/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  await purgeJob(request.params.id);
-  return reply.code(204).send();
+  return reply.code(405).header("allow", "GET").send({ error: "公开回看链接不能删除任务，请在管理后台执行永久删除。" });
 });
 
 app.get("/api/jobs/:id/frames/:filename", async (request: FastifyRequest<{ Params: { id: string; filename: string } }>, reply: FastifyReply) => {
-  const job = getJob(request.params.id);
-  if (!job || !job.result) return reply.code(404).send({ error: "这张抽帧已经消失了。" });
+  const job = await loadJob(request.params.id);
+  if (!job || !job.result) return reply.code(404).send({ error: "找不到这张关键帧。" });
   const filename = basename(request.params.filename);
   const frame = job.result.frames.find((item) => item.filename === filename);
-  if (!frame) return reply.code(404).send({ error: "找不到这张抽帧。" });
-  const framePath = resolve(job.dir, "frames", filename);
-  if (!framePath.startsWith(resolve(job.dir, "frames"))) return reply.code(400).send({ error: "非法文件路径。" });
-  try {
-    await stat(framePath);
-    return reply.header("cache-control", "no-store").type("image/jpeg").send(createReadStream(framePath));
-  } catch {
-    return reply.code(404).send({ error: "这张抽帧已经消失了。" });
-  }
+  if (!frame?.storageKey) return reply.code(404).send({ error: "找不到这张关键帧。" });
+  return sendStoredObject(request, reply, frame.storageKey, "image/jpeg");
 });
 
 app.get("/api/temp/:token", async (request: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
@@ -149,34 +216,32 @@ app.get("/api/temp/:token", async (request: FastifyRequest<{ Params: { token: st
 });
 
 app.get("/api/jobs/:id/video", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  const job = getJob(request.params.id);
-  if (!job?.result || !job.inputPath) return reply.code(404).send({ error: "这段视频已经消失了。" });
+  const job = await loadJob(request.params.id);
+  if (!job?.inputObjectKey || !job.mediaAvailable) return reply.code(404).send({ error: "找不到这段视频。" });
+  return sendStoredObject(request, reply, job.inputObjectKey, normalizeVideoContentType(job.inputMimeType));
+});
+
+async function sendStoredObject(request: FastifyRequest, reply: FastifyReply, key: string, mimeType: string, disposition?: string) {
   try {
-    const info = await stat(job.inputPath);
+    const object = await storedObjectInfo(key);
+    if ("url" in object) {
+      return reply.header("cache-control", "no-store").redirect(object.url);
+    }
     const rangeHeader = request.headers.range;
-    const range = rangeHeader ? parseByteRange(rangeHeader, info.size) : null;
-    if (rangeHeader && !range) {
-      return reply.code(416).header("content-range", `bytes */${info.size}`).send();
-    }
-
-    reply
-      .header("accept-ranges", "bytes")
-      .header("cache-control", "no-store")
-      .type(normalizeVideoContentType(job.inputMimeType));
-
-    if (!range) {
-      return reply.header("content-length", info.size).send(createReadStream(job.inputPath));
-    }
-
+    const range = rangeHeader ? parseByteRange(rangeHeader, object.size) : null;
+    if (rangeHeader && !range) return reply.code(416).header("content-range", `bytes */${object.size}`).send();
+    reply.header("accept-ranges", "bytes").header("cache-control", "private, max-age=3600").type(mimeType);
+    if (disposition) reply.header("content-disposition", disposition);
+    if (!range) return reply.header("content-length", object.size).send(createReadStream(object.path));
     return reply
       .code(206)
-      .header("content-range", `bytes ${range.start}-${range.end}/${info.size}`)
+      .header("content-range", `bytes ${range.start}-${range.end}/${object.size}`)
       .header("content-length", range.end - range.start + 1)
-      .send(createReadStream(job.inputPath, range));
+      .send(createReadStream(object.path, range));
   } catch {
-    return reply.code(404).send({ error: "这段视频已经消失了。" });
+    return reply.code(404).send({ error: "找不到这个持久化文件。" });
   }
-});
+}
 
 const distPath = resolve("dist");
 try {
@@ -191,6 +256,30 @@ try {
 }
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
+
+function requireAdmin(request: FastifyRequest, reply: FastifyReply): boolean {
+  if (!adminAuthEnabled()) {
+    reply.code(503).send({ error: "管理后台尚未启用，请先配置 ADMIN_PASSWORD。" });
+    return false;
+  }
+  if (!isAdminSession(request.headers.cookie)) {
+    reply.code(401).send({ error: "管理员登录已失效，请重新登录。" });
+    return false;
+  }
+  return true;
+}
+
+function requireAdminMutation(request: FastifyRequest, reply: FastifyReply): boolean {
+  if (!adminMutationHeader(request)) {
+    reply.code(403).send({ error: "管理请求校验失败。" });
+    return false;
+  }
+  return requireAdmin(request, reply);
+}
+
+function adminMutationHeader(request: FastifyRequest): boolean {
+  return request.headers["x-koma-admin"] === "1";
+}
 
 function validateVideoUrl(value: string): void {
   if (typeof value !== "string" || !value.trim()) throw new Error("请输入视频地址。");

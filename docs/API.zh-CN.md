@@ -20,7 +20,7 @@ curl -X POST http://localhost:3000/api/analyze/url \
   }'
 ```
 
-返回 `202`：
+返回 `202`。这个 ID 同时组成永久、不可猜的回看地址 `/jobs/JOB_ID`：
 
 ```json
 { "jobId": "..." }
@@ -52,7 +52,7 @@ curl http://localhost:3000/api/jobs/JOB_ID
 curl http://localhost:3000/api/jobs/JOB_ID/extraction
 ```
 
-这个接口原样返回 `extractedData`。任务仍在执行时返回 `409`，任务没有请求自定义提取时返回 `404`，任务到期清理后也返回 `404`。
+这个接口原样返回 `extractedData`。任务仍在执行时返回 `409`；没有请求自定义提取或任务已被管理员删除时返回 `404`。
 
 ## 下载生成文件
 
@@ -68,4 +68,23 @@ curl http://localhost:3000/api/jobs/JOB_ID/extraction
 }
 ```
 
-访问 `downloadUrl` 即可下载。文件与任务一起在 TTL 到期后清理。当前只生成文本类产物，不接受模型返回的 base64 或二进制文件。
+访问 `downloadUrl` 即可下载持久化文件；视频和关键帧也通过同一套只读任务 API 提供。当前只生成文本类产物，不接受模型返回的 base64 或二进制文件。
+
+公开任务接口只读。`DELETE /api/jobs/:id` 返回 `405`，永久删除只能通过已登录的管理 API 执行。
+
+## 管理 API
+
+管理接口只供同源的 `/admin` 页面使用。配置 `ADMIN_PASSWORD` 后，先调用 `POST /api/admin/login` 建立 HttpOnly 会话；所有管理写请求还必须携带 `x-koma-admin: 1`，用于防止跨站请求伪造。
+
+| 方法 | 地址 | 用途 |
+| --- | --- | --- |
+| `GET` | `/api/admin/session` | 检查后台是否启用以及当前登录状态 |
+| `POST` | `/api/admin/login` | 管理员登录 |
+| `DELETE` | `/api/admin/session` | 退出登录 |
+| `GET` | `/api/admin/settings` | 读取脱敏 Provider 设置 |
+| `PUT` | `/api/admin/settings` | 保存 Provider、模型、Base URL 和可选的新 Key |
+| `POST` | `/api/admin/settings/reset` | 恢复服务器环境变量中的 Provider 配置 |
+| `GET` | `/api/admin/jobs` | 读取最多 200 个永久任务 |
+| `DELETE` | `/api/admin/jobs/:id` | 停止任务并永久删除数据库记录及整个存储目录 |
+
+设置接口永远不会返回 API Key 明文；只会返回 `keyConfigured` 和类似 `••••1234` 的 `keyHint`。

@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.13.1
           cache: npm
 
       - name: Resolve deployment settings
@@ -55,7 +55,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: "dist/,dist-server/,package.json,package-lock.json"
+          source: "dist/,dist-server/,scripts/write-deployment-env.mjs,package.json,package-lock.json"
           target: ${{ steps.deploy-meta.outputs.deploy_target }}
           strip_components: 0
 
@@ -79,36 +79,35 @@ jobs:
           VISION_MODEL: ${{ secrets.VISION_MODEL }}
           PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
           DEMO_REQUESTS_PER_IP_PER_DAY: ${{ secrets.DEMO_REQUESTS_PER_IP_PER_DAY }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          KOMA_CONFIG_SECRET: ${{ secrets.KOMA_CONFIG_SECRET }}
+          DB_DRIVER: ${{ secrets.DB_DRIVER }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_SSL: ${{ secrets.DB_SSL }}
+          DB_AUTO_CREATE: ${{ secrets.DB_AUTO_CREATE }}
+          STORAGE_DRIVER: ${{ secrets.STORAGE_DRIVER }}
+          LOCAL_STORAGE_PATH: ${{ secrets.LOCAL_STORAGE_PATH }}
+          OSS_REGION: ${{ secrets.OSS_REGION }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_UPLOAD_PREFIX: ${{ secrets.OSS_UPLOAD_PREFIX }}
+          OSS_PUBLIC_BASE_URL: ${{ secrets.OSS_PUBLIC_BASE_URL }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           timeout: 30m
-          envs: APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY
+          envs: APP_PORT,ASR_PROVIDER,ASR_API_KEY,ASR_BASE_URL,DASHSCOPE_API_KEY,GROQ_API_KEY,OPENAI_API_KEY,ASR_MODEL,VISION_PROVIDER,VISION_API_KEY,VISION_BASE_URL,GEMINI_API_KEY,OPENROUTER_API_KEY,VISION_MODEL,PUBLIC_BASE_URL,DEMO_REQUESTS_PER_IP_PER_DAY,ADMIN_PASSWORD,KOMA_CONFIG_SECRET,DB_DRIVER,DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME,DB_SSL,DB_AUTO_CREATE,STORAGE_DRIVER,LOCAL_STORAGE_PATH,OSS_REGION,OSS_ACCESS_KEY_ID,OSS_ACCESS_KEY_SECRET,OSS_BUCKET,OSS_UPLOAD_PREFIX,OSS_PUBLIC_BASE_URL
           script: |
             set -e
             cd ${{ steps.deploy-meta.outputs.deploy_target }}
             npm install --omit=dev --no-audit --no-fund --prefer-offline
-            cat > .env <<EOF
-            PORT=${APP_PORT}
-            ASR_PROVIDER=${ASR_PROVIDER}
-            ASR_API_KEY=${ASR_API_KEY}
-            ASR_BASE_URL=${ASR_BASE_URL}
-            DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
-            GROQ_API_KEY=${GROQ_API_KEY}
-            OPENAI_API_KEY=${OPENAI_API_KEY}
-            ASR_MODEL=${ASR_MODEL}
-            VISION_PROVIDER=${VISION_PROVIDER}
-            VISION_API_KEY=${VISION_API_KEY}
-            VISION_BASE_URL=${VISION_BASE_URL}
-            GEMINI_API_KEY=${GEMINI_API_KEY}
-            OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-            VISION_MODEL=${VISION_MODEL}
-            PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
-            DEMO_REQUESTS_PER_IP_PER_DAY=${DEMO_REQUESTS_PER_IP_PER_DAY}
-            TRUST_PROXY=true
-            EOF
-            chmod 600 .env
+            node scripts/write-deployment-env.mjs .env
             pm2 delete ding-frame 2>/dev/null || true
             pm2 delete koma 2>/dev/null || true
             pm2 start dist-server/index.js --name koma

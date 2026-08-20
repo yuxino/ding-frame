@@ -3,6 +3,8 @@ import { config } from "./config.js";
 import type { AnalysisResult, Chapter, Frame, Tag, TranscriptLine } from "./jobs.js";
 import { assertMatchesOutputShape, hasCustomAnalysis, hasExtractionRequest, type AnalysisSpec } from "./analysis-spec.js";
 import { missingArtifactFormats, normalizeArtifacts } from "./artifacts.js";
+import { getRuntimeProviders, type RuntimeProvider } from "./provider-runtime.js";
+import type { VisionProvider } from "./config.js";
 
 export type AnalysisLanguage = "en" | "zh";
 
@@ -17,19 +19,21 @@ interface AnalyzeInput {
   language?: AnalysisLanguage;
   /** Optional natural-language extraction request plus target JSON shape. */
   analysisSpec?: AnalysisSpec;
+  /** 任务创建时的视觉 Provider 快照，避免后台切换影响正在执行的任务。 */
+  provider?: RuntimeProvider<VisionProvider>;
 }
 
-export async function analyze({ title, durationMs, frames, transcript, framesDir, signal, language = "zh", analysisSpec = {} }: AnalyzeInput): Promise<AnalysisResult> {
-  if (config.visionProvider === "mock") {
+export async function analyze({ title, durationMs, frames, transcript, framesDir, signal, language = "zh", analysisSpec = {}, provider = getRuntimeProviders().vision }: AnalyzeInput): Promise<AnalysisResult> {
+  if (provider.provider === "mock") {
     if (hasCustomAnalysis(analysisSpec)) throw new Error("自定义提取和文件产物需要配置真实的视觉模型，mock 模式只提供通用演示结果。");
     return localAnalysis({ title, durationMs, frames, transcript, language });
   }
   // 视觉模型偶发返回非 JSON（安全拒绝、闲聊开头等），重试一次能显著降低失败率。
   try {
-    return await analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language, analysisSpec });
+    return await analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language, analysisSpec, provider });
   } catch (error) {
     if (error instanceof Error && (error.message.includes("有效 JSON") || error.message.includes("结构化提取") || error.message.includes("产物文件")) && !signal?.aborted) {
-      return await analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language, analysisSpec });
+      return await analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language, analysisSpec, provider });
     }
     throw error;
   }
@@ -99,11 +103,12 @@ export function fallbackChapters(transcript: TranscriptLine[], durationMs: numbe
   return chapters;
 }
 
-async function analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language = "zh", analysisSpec = {} }: AnalyzeInput): Promise<AnalysisResult> {
-  if (!config.visionApiKey || !config.visionBaseUrl || !config.visionModel) {
-    throw new Error(`VISION_PROVIDER=${config.visionProvider} 缺少 API Key、Base URL 或模型配置。`);
+async function analyzeWithVisionModel({ title, durationMs, frames, transcript, framesDir, signal, language = "zh", analysisSpec = {}, provider = getRuntimeProviders().vision }: AnalyzeInput): Promise<AnalysisResult> {
+  if (!provider.apiKey || !provider.baseUrl || !provider.model) {
+    throw new Error(`VISION_PROVIDER=${provider.provider} 缺少 API Key、Base URL 或模型配置。`);
   }
-  const selectedFrames = selectRepresentativeFrames(frames, config.visionMaxFrames);
+  const frameLimit = provider.provider === "groq" ? Math.min(config.visionMaxFrames, 5) : config.visionMaxFrames;
+  const selectedFrames = selectRepresentativeFrames(frames, frameLimit);
   const frameGroups = await Promise.all(selectedFrames.map(async ({ frame, index }) => {
     const base64 = (await readFile(`${framesDir}/${frame.filename}`)).toString("base64");
     return [
@@ -117,14 +122,14 @@ async function analyzeWithVisionModel({ title, durationMs, frames, transcript, f
     config.visionTranscriptChars
   );
   const prompt = buildAnalysisPrompt({ title, durationMs, transcriptText, language, analysisSpec });
-  const response = await fetch(`${config.visionBaseUrl.replace(/\/$/, "")}/chat/completions`, {
+  const response = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${config.visionApiKey}`,
+      Authorization: `Bearer ${provider.apiKey}`,
       "content-type": "application/json",
-      ...(config.visionProvider === "openrouter" ? { "HTTP-Referer": "https://github.com/yuxino/koma", "X-Title": "Koma" } : {})
+      ...(provider.provider === "openrouter" ? { "HTTP-Referer": "https://github.com/yuxino/koma", "X-Title": "Koma" } : {})
     },
-    body: JSON.stringify({ model: config.visionModel, temperature: 0.2, max_tokens: analysisSpec.artifactFormats?.length ? config.artifactMaxTokens : config.visionMaxTokens, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
+    body: JSON.stringify({ model: provider.model, temperature: 0.2, max_tokens: analysisSpec.artifactFormats?.length ? config.artifactMaxTokens : config.visionMaxTokens, messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...frameContent] }] }),
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(config.aiTimeoutMs)]) : AbortSignal.timeout(config.aiTimeoutMs)
   });
   const body = await response.json().catch(() => ({})) as { error?: { message?: string }; message?: string; choices?: Array<{ message?: { content?: unknown } }> };

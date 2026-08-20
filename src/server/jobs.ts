@@ -1,10 +1,13 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { config } from "./config.js";
+import { config, type AsrProvider, type VisionProvider } from "./config.js";
 import type { TranscriptLine } from "./types.js";
 import type { AnalysisSpec } from "./analysis-spec.js";
 import type { Artifact } from "./artifacts.js";
+import { deleteJobRecord, readJobRecord, writeJobRecord, type PersistedJobRecord } from "./database.js";
+import { getRuntimeProviders, type RuntimeProviders } from "./provider-runtime.js";
+import { deleteStoredPrefix, jobStoragePrefix } from "./storage.js";
 export type { TranscriptLine };
 
 export interface Frame {
@@ -12,13 +15,13 @@ export interface Frame {
   atMs: number;
   caption?: string;
   path?: string;
+  storageKey?: string;
 }
 
 export interface Chapter {
   startMs: number;
   endMs: number;
   title: string;
-  /** 两三句的详细说明，讲清这段内容讲了什么 */
   summary: string;
 }
 
@@ -28,20 +31,19 @@ export interface Tag {
   atMs: number;
 }
 
+export type StoredArtifact = Artifact & { storageKey?: string };
+
 export interface AnalysisResult {
   title: string;
   durationMs: number;
   summary: string;
   tags: Tag[];
-  /** 内容章节总结：覆盖整个视频，按时间分段，点击可跳转 */
   chapters: Chapter[];
   transcript: TranscriptLine[];
   hasSubtitles?: boolean;
   frames: Frame[];
-  /** 用户按分析要求提取出的任意 JSON；默认通用总结任务不返回。 */
   extractedData?: unknown;
-  /** Optional downloadable text files generated from the analysis request. */
-  artifacts?: Artifact[];
+  artifacts?: StoredArtifact[];
 }
 
 export interface JobProgress {
@@ -57,24 +59,27 @@ export interface Job {
   sourceUrl?: string;
   title: string;
   createdAt: number;
-  expiresAt: number;
+  updatedAt: number;
+  completedAt: number | null;
   status: "queued" | "processing" | "done" | "failed";
   progress: JobProgress;
   result: AnalysisResult | null;
   error: string | null;
   inputPath?: string;
   inputMimeType?: string;
-  /** 分析结果的语言：标题、总结、标签等 AI 生成文案按此语言输出。 */
+  inputObjectKey?: string;
+  storagePrefix: string;
+  mediaAvailable: boolean;
   language: "en" | "zh";
-  /** 可选的自定义分析要求与期望 JSON 结构。 */
   analysisSpec: AnalysisSpec;
+  providers: RuntimeProviders;
 }
 
 const jobs = new Map<string, Job>();
-// 每个任务的取消信号：purgeJob 或到期清理时触发，让正在跑的管线尽快停下来。
 const abortControllers = new Map<string, AbortController>();
+const persistenceQueues = new Map<string, Promise<void>>();
 
-export async function createJob({ source, title, language = "zh", analysisSpec = {} }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec }): Promise<Job> {
+export async function createJob({ source, title, language = "zh", analysisSpec = {}, providers = getRuntimeProviders() }: { source: Job["source"]; title: string; language?: "en" | "zh"; analysisSpec?: AnalysisSpec; providers?: RuntimeProviders }): Promise<Job> {
   const id = randomUUID();
   const dir = join(config.tempRoot, `koma-${id}`);
   await mkdir(dir, { recursive: true });
@@ -85,17 +90,21 @@ export async function createJob({ source, title, language = "zh", analysisSpec =
     source,
     title: title || "未命名视频",
     createdAt: now,
-    expiresAt: now + config.resultTtlSeconds * 1000,
+    updatedAt: now,
+    completedAt: null,
     status: "queued",
-    progress: { stage: "queued", percent: 4, detail: "视频已经放入临时空间。" },
+    progress: { stage: "queued", percent: 4, detail: "任务已经进入处理队列。" },
     result: null,
     error: null,
+    storagePrefix: jobStoragePrefix(id),
+    mediaAvailable: false,
     language,
-    analysisSpec
+    analysisSpec,
+    providers
   };
   jobs.set(id, job);
   abortControllers.set(id, new AbortController());
-  scheduleExpiry(job);
+  await writeJobRecord(toPersistedRecord(job));
   return job;
 }
 
@@ -107,21 +116,38 @@ export function getJob(id: string): Job | undefined {
   return jobs.get(id);
 }
 
+export async function loadJob(id: string): Promise<Job | undefined> {
+  const active = jobs.get(id);
+  if (active) return active;
+  const record = await readJobRecord(id);
+  if (!record) return undefined;
+  const job = fromPersistedRecord(record);
+  jobs.set(id, job);
+  return job;
+}
+
 export function updateJob(job: Job, patch: Partial<Job>): Job {
   Object.assign(job, patch);
+  job.updatedAt = Date.now();
+  if (job.status === "done" && !job.completedAt) job.completedAt = job.updatedAt;
+  queuePersistence(job);
   return job;
+}
+
+export async function flushJob(job: Job): Promise<void> {
+  await persistenceQueues.get(job.id);
 }
 
 export function serializeJob(job: Job | undefined) {
   if (!job) return null;
   const result = job.result && {
     ...job.result,
-    videoUrl: `/api/jobs/${job.id}/video`,
-    artifacts: job.result.artifacts?.map(({ content: _content, ...artifact }) => ({
+    videoUrl: job.mediaAvailable ? `/api/jobs/${job.id}/video` : undefined,
+    artifacts: job.result.artifacts?.map(({ content: _content, storageKey: _storageKey, ...artifact }) => ({
       ...artifact,
       downloadUrl: `/api/jobs/${job.id}/artifacts/${artifact.id}`
     })),
-    frames: job.result.frames.map((frame) => ({
+    frames: job.result.frames.map(({ path: _path, storageKey: _storageKey, ...frame }) => ({
       ...frame,
       url: `/api/jobs/${job.id}/frames/${encodeURIComponent(frame.filename)}`
     }))
@@ -131,33 +157,120 @@ export function serializeJob(job: Job | undefined) {
     source: job.source,
     title: job.title,
     createdAt: job.createdAt,
-    expiresAt: job.expiresAt,
+    updatedAt: job.updatedAt,
+    completedAt: job.completedAt,
     status: job.status,
     progress: job.progress,
     analysisSpec: job.analysisSpec,
+    providers: {
+      asr: { provider: job.providers.asr.provider, model: job.providers.asr.model },
+      vision: { provider: job.providers.vision.provider, model: job.providers.vision.model }
+    },
     result,
     error: job.error
   };
 }
 
-export async function purgeJob(id: string): Promise<void> {
-  await expireJob(id);
-}
-
-// 清除任务：触发取消信号、移除内存记录、删除磁盘目录。
-// 同时被 purgeJob 和到期定时器使用，保证两种路径都清理干净。
-export async function expireJob(id: string): Promise<void> {
-  const job = jobs.get(id);
+export async function deleteJob(id: string): Promise<void> {
+  const job = jobs.get(id) || await loadJob(id);
   abortControllers.get(id)?.abort();
   abortControllers.delete(id);
+  await persistenceQueues.get(id);
+  persistenceQueues.delete(id);
   jobs.delete(id);
-  if (job) await rm(job.dir, { recursive: true, force: true }).catch(() => undefined);
+  if (job) {
+    await deleteStoredPrefix(job.storagePrefix).catch((error) => console.warn(`[koma] 无法清理任务存储：${messageOf(error)}`));
+    await rm(job.dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+  await deleteJobRecord(id);
 }
 
-function scheduleExpiry(job: Job): void {
-  setTimeout(() => {
-    // 到期时不仅要清掉内存记录，还要把磁盘上的视频、抽帧和中间产物一起删掉，
-    // 兑现“20 分钟后自动消失”的承诺，避免临时目录无限堆积。
-    expireJob(job.id).catch(() => undefined);
-  }, Math.max(0, job.expiresAt - Date.now())).unref?.();
+export async function releaseWorkingDirectory(job: Job): Promise<void> {
+  await flushJob(job);
+  await rm(job.dir, { recursive: true, force: true }).catch(() => undefined);
+  job.inputPath = undefined;
+}
+
+function queuePersistence(job: Job): void {
+  const previous = persistenceQueues.get(job.id) || Promise.resolve();
+  const snapshot = toPersistedRecord(job);
+  const update = previous
+    .catch((error) => console.warn(`[koma] 上一次任务持久化失败：${messageOf(error)}`))
+    .then(() => writeJobRecord(snapshot));
+  persistenceQueues.set(job.id, update);
+  void update.catch((error) => console.warn(`[koma] 无法持久化任务：${messageOf(error)}`));
+  void update.finally(() => {
+    if (persistenceQueues.get(job.id) === update) persistenceQueues.delete(job.id);
+  }).catch(() => undefined);
+}
+
+function toPersistedRecord(job: Job): PersistedJobRecord {
+  return {
+    id: job.id,
+    source: job.source,
+    title: job.title,
+    status: job.status,
+    stage: job.progress.stage,
+    percent: job.progress.percent,
+    detail: job.progress.detail,
+    language: job.language,
+    analysisSpec: job.analysisSpec,
+    result: persistentResult(job.result),
+    asrProvider: job.providers.asr.provider,
+    asrModel: job.providers.asr.model,
+    visionProvider: job.providers.vision.provider,
+    visionModel: job.providers.vision.model,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    completedAt: job.completedAt,
+    storagePrefix: job.storagePrefix,
+    inputObjectKey: job.inputObjectKey || null,
+    inputMimeType: job.inputMimeType || null,
+    mediaAvailable: job.mediaAvailable,
+    error: job.error
+  };
+}
+
+function persistentResult(result: AnalysisResult | null): AnalysisResult | null {
+  if (!result) return null;
+  return {
+    ...result,
+    frames: result.frames.map(({ path: _path, ...frame }) => frame),
+    artifacts: result.artifacts?.map(({ content: _content, ...artifact }) => ({ ...artifact, content: "" }))
+  };
+}
+
+function fromPersistedRecord(record: PersistedJobRecord): Job {
+  const result = record.result && typeof record.result === "object" ? record.result as AnalysisResult : null;
+  return {
+    id: record.id,
+    dir: join(config.tempRoot, `koma-${record.id}`),
+    source: record.source,
+    title: record.title,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    completedAt: record.completedAt,
+    status: normalizeStatus(record.status),
+    progress: { stage: record.stage, percent: record.percent, detail: record.detail },
+    result,
+    error: record.error,
+    inputMimeType: record.inputMimeType || undefined,
+    inputObjectKey: record.inputObjectKey || undefined,
+    storagePrefix: record.storagePrefix,
+    mediaAvailable: record.mediaAvailable,
+    language: record.language,
+    analysisSpec: record.analysisSpec && typeof record.analysisSpec === "object" ? record.analysisSpec as AnalysisSpec : {},
+    providers: {
+      asr: { provider: record.asrProvider as AsrProvider, apiKey: "", baseUrl: "", model: record.asrModel },
+      vision: { provider: record.visionProvider as VisionProvider, apiKey: "", baseUrl: "", model: record.visionModel }
+    }
+  };
+}
+
+function normalizeStatus(value: string): Job["status"] {
+  return value === "queued" || value === "processing" || value === "done" ? value : "failed";
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
