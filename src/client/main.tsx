@@ -5,6 +5,7 @@ import AdminApp from "./AdminApp.tsx";
 import "./styles.css";
 import "./hallmark.css";
 import "./mobile-header.css";
+import "./light-theme.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
