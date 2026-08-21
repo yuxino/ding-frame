@@ -1,21 +1,22 @@
 # Koma design system
 
-Koma uses a Hallmark-inspired **atmospheric workbench** system: the product interface is the visual center, not a SaaS marketing shell.
+Koma uses a Hallmark-inspired **light paper workbench** system: the product interface is the visual center, not a SaaS marketing shell.
 
 ## Design intent
 
 - Audience: people turning video into summaries, structured data, subtitles, reports, and reusable files.
 - Primary job: submit a video, specify the extraction, and inspect/reopen the result with minimal ceremony.
-- Tone: technical, restrained, nocturnal, operator-focused.
+- Tone: technical, restrained, calm, operator-focused.
 - Macrostructure: asymmetric workbench. A compact explanatory rail sits beside a dominant analysis panel.
 
 ## Tokens
 
-The implementation lives in `src/client/hallmark.css` and must remain token-driven.
+The structural system lives in `src/client/hallmark.css`; the active light palette is applied by `src/client/light-theme.css`.
 
-- Background: near-black green-neutral.
-- Panels: low-contrast raised surfaces, separated mainly by hairline borders rather than shadows.
+- Background: warm paper-like off-white, never stark pure white across the whole page.
+- Panels: white and soft warm-gray surfaces, separated mainly by hairline borders with only subtle elevation.
 - Accent: Koma acid-lime. Use it for active state, focus, progress, and key status only.
+- Media: video players, frame viewers, and image inspection surfaces remain dark for contrast.
 - Danger: warm red reserved for destructive or failed states.
 - Display type: system display sans.
 - Body type: Geist/system sans.
@@ -43,7 +44,8 @@ Do not drift back toward generic AI/SaaS styling:
 - no gratuitous all-caps section kickers;
 - no invented metrics or social proof;
 - no excessive floating shadows or pill containers;
-- no italic display headings.
+- no italic display headings;
+- no full-app dark theme unless explicitly requested again.
 
 ## Product consistency
 
